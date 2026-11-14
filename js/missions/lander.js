@@ -85,17 +85,17 @@ Game.register({
       const imgs = {};
       [['bg', B.bg], ['lander', 'assets/base/lander.png'], ['tex', B.id === 'moon' ? 'assets/mars/tex-mars-boulder.jpg' : 'assets/mars/tex-mars-sand.jpg']]
         .forEach(([k, src]) => { imgs[k] = new Image(); imgs[k].src = src; });
-      let pattern = null;
+      let pattern = null, bgCv = null;
 
       // рельеф: холмы и ровная площадка
       const WORLD = W / M;
       const padX = 60 + Math.random() * (WORLD - 120), padW = 26;
       const terrain = [];
       for (let x = 0; x <= WORLD; x += 4) {
-        let y = 18 + Math.sin(x * 0.05) * 7 + Math.sin(x * 0.13 + 2) * 4 + Math.sin(x * 0.31) * 1.5;
+        let y = 34 + Math.sin(x * 0.05) * 8 + Math.sin(x * 0.13 + 2) * 4 + Math.sin(x * 0.31) * 1.5;
         terrain.push([x, y]);
       }
-      const padY = 16;
+      const padY = 30;
       terrain.forEach(p => { if (Math.abs(p[0] - padX) < padW / 2 + 6) p[1] = Math.abs(p[0] - padX) < padW / 2 ? padY : (p[1] + padY) / 2; });
       const groundAt = x => {
         const i = clamp(Math.floor(x / 4), 0, terrain.length - 2);
@@ -103,7 +103,7 @@ Game.register({
         return y0 + (y1 - y0) * ((x - x0) / (x1 - x0));
       };
 
-      const L_ = { x: padX < WORLD / 2 ? WORLD - 40 : 40, y: 140, vx: padX < WORLD / 2 ? -3 : 3, vy: 0, a: 0, fuel: B.fuel, on: false };
+      const L_ = { x: padX < WORLD / 2 ? WORLD - 40 : 40, y: 128, vx: padX < WORLD / 2 ? -3 : 3, vy: 0, a: 0, fuel: B.fuel, on: false };
       const keys = {};
       const kd = e => { const k = e.key.toLowerCase(); if (['arrowup', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault(); keys[k] = true; };
       const ku = e => { keys[e.key.toLowerCase()] = false; };
@@ -186,11 +186,14 @@ Game.register({
 
       const X = x => x * M, Y = y => H - y * M;
       function draw() {
-        if (imgs.bg.complete && imgs.bg.naturalWidth) {
-          const im = imgs.bg, sc = Math.max(W / im.naturalWidth, H / im.naturalHeight);
-          g.drawImage(im, (W - im.naturalWidth * sc) / 2, (H - im.naturalHeight * sc) / 2, im.naturalWidth * sc, im.naturalHeight * sc);
-          g.fillStyle = 'rgba(20,16,60,0.35)'; g.fillRect(0, 0, W, H);
-        } else { g.fillStyle = '#17206e'; g.fillRect(0, 0, W, H); }
+        if (!bgCv && imgs.bg.complete && imgs.bg.naturalWidth) {
+          bgCv = document.createElement('canvas'); bgCv.width = W; bgCv.height = H;
+          const b = bgCv.getContext('2d'), im = imgs.bg, sc = Math.max(W / im.naturalWidth, H / im.naturalHeight);
+          b.filter = 'blur(3px) saturate(0.8)';
+          b.drawImage(im, (W - im.naturalWidth * sc) / 2, (H - im.naturalHeight * sc) / 2 - H * 0.12, im.naturalWidth * sc, im.naturalHeight * sc);
+          b.filter = 'none'; b.fillStyle = 'rgba(20,16,60,0.6)'; b.fillRect(0, 0, W, H);
+        }
+        if (bgCv) g.drawImage(bgCv, 0, 0); else { g.fillStyle = '#17206e'; g.fillRect(0, 0, W, H); }
         // грунт
         if (!pattern && imgs.tex.complete && imgs.tex.naturalWidth) pattern = g.createPattern(imgs.tex, 'repeat');
         g.beginPath(); g.moveTo(0, H);
@@ -198,10 +201,28 @@ Game.register({
         g.lineTo(W, H); g.closePath();
         g.fillStyle = B.ground; g.fill();
         if (pattern) { g.save(); if (B.id === 'moon') g.filter = 'grayscale(1) brightness(1.1)'; g.globalAlpha = 0.55; g.fillStyle = pattern; g.fill(); g.restore(); }
-        // площадка
-        const px0 = X(padX - padW / 2), px1 = X(padX + padW / 2), py = Y(padY);
-        g.fillStyle = '#e8e6ff'; g.fillRect(px0, py - 4, px1 - px0, 6);
-        for (let i = 0; i < 6; i++) { g.fillStyle = Math.sin(t * 6 + i) > 0 ? '#ffd166' : '#ff9a3c'; g.fillRect(px0 + i * (px1 - px0) / 5 - 3, py - 8, 6, 5); }
+        // яркая кромка грунта — чтобы поверхность была хорошо видна
+        g.beginPath(); terrain.forEach(([x, y], i) => i ? g.lineTo(X(x), Y(y)) : g.moveTo(X(x), Y(y)));
+        g.lineWidth = 6; g.strokeStyle = B.id === 'moon' ? '#e8e6ff' : '#ffc79a'; g.lineJoin = 'round'; g.stroke();
+        // площадка: толстая плита, опоры, мигающие маяки и луч света вверх
+        const px0 = X(padX - padW / 2), px1 = X(padX + padW / 2), py = Y(padY), pw = px1 - px0, pcx = (px0 + px1) / 2;
+        const beam = g.createLinearGradient(0, py - 260, 0, py);
+        beam.addColorStop(0, 'rgba(126,224,160,0)'); beam.addColorStop(1, 'rgba(126,224,160,0.28)');
+        g.fillStyle = beam; g.fillRect(px0, py - 260, pw, 260);
+        g.fillStyle = '#4b3fb5'; g.fillRect(px0 + 8, py + 12, 14, 30); g.fillRect(px1 - 22, py + 12, 14, 30);
+        g.fillStyle = '#e8e6ff'; g.fillRect(px0 - 6, py - 4, pw + 12, 18);
+        g.lineWidth = 4; g.strokeStyle = '#2b2a6b'; g.strokeRect(px0 - 6, py - 4, pw + 12, 18);
+        for (let i = 0; i < 8; i++) { g.fillStyle = i % 2 ? '#ffd166' : '#2b2a6b'; g.fillRect(px0 + i * pw / 8, py, pw / 8, 10); }
+        [px0 - 2, px1 + 2].forEach((bx, i) => {
+          g.fillStyle = '#c8c4f0'; g.fillRect(bx - 3, py - 34, 6, 32);
+          g.fillStyle = Math.sin(t * 6 + i * 3) > 0 ? '#7ee0a0' : '#2f8f5a';
+          g.beginPath(); g.arc(bx, py - 38, 9, 0, 7); g.fill(); g.lineWidth = 3; g.strokeStyle = '#2b2a6b'; g.stroke();
+        });
+        // стрелка «сюда» над площадкой
+        const bob = Math.sin(t * 5) * 8;
+        g.fillStyle = '#7ee0a0'; g.strokeStyle = '#2b2a6b'; g.lineWidth = 4;
+        g.beginPath(); g.moveTo(pcx - 22, py - 110 + bob); g.lineTo(pcx + 22, py - 110 + bob); g.lineTo(pcx, py - 80 + bob); g.closePath(); g.fill(); g.stroke();
+        g.font = '900 26px Nunito, sans-serif'; g.textAlign = 'center'; g.lineWidth = 6; g.strokeText(L('СЮДА', 'HERE'), pcx, py - 120 + bob); g.fillText(L('СЮДА', 'HERE'), pcx, py - 120 + bob);
         // модуль
         const lx = X(L_.x), ly = Y(L_.y), size = 72;
         g.save(); g.translate(lx, ly); g.rotate(L_.a);
@@ -217,23 +238,30 @@ Game.register({
       }
       function hud() {
         const alt = Math.max(0, L_.y - 2.2 - groundAt(L_.x));
-        const vy = -L_.vy;
-        g.fillStyle = 'rgba(13,18,64,0.75)'; g.fillRect(14, 14, 260, 122);
-        g.font = '800 15px Nunito, sans-serif'; g.textAlign = 'left';
-        const row = (label, val, color, y) => { g.fillStyle = '#cfe6ff'; g.fillText(label, 26, y); g.fillStyle = color; g.fillText(val, 170, y); };
-        row(L('Высота', 'Altitude'), `${alt.toFixed(0)} ${L('м', 'm')}`, '#fff', 38);
-        row(L('Скорость вниз', 'Fall speed'), `${vy.toFixed(1)} ${L('м/с', 'm/s')}`, vy < 2.2 ? '#7ee0a0' : vy < 5 ? '#ffd166' : '#ff8a9a', 62);
-        row(L('Вбок', 'Sideways'), `${Math.abs(L_.vx).toFixed(1)} ${L('м/с', 'm/s')}`, Math.abs(L_.vx) < 1.5 ? '#7ee0a0' : '#ffd166', 86);
-        g.fillStyle = '#cfe6ff'; g.fillText(L('Топливо', 'Fuel'), 26, 112);
-        g.fillStyle = 'rgba(255,255,255,0.15)'; g.fillRect(110, 101, 150, 12);
-        g.fillStyle = L_.fuel > 25 ? '#ffb454' : '#ff5468'; g.fillRect(110, 101, 150 * L_.fuel / 100, 12);
-        g.fillStyle = 'rgba(13,18,64,0.75)'; g.fillRect(W - 200, 14, 186, 40);
-        g.fillStyle = '#ffd166'; g.fillText(`g = ${B.g} ${L('м/с²', 'm/s²')}`, W - 186, 40);
-        // стрелка к площадке
+        const vy = -L_.vy, k = touch ? 1.6 : 1; // на телефоне холст сильно уменьшен — табло крупнее
+        g.save(); g.scale(k, k);
+        const w = W / k, cell = (w - 20) / 5;
+        g.fillStyle = 'rgba(13,18,64,0.8)'; g.fillRect(10, 8, w - 20, 44);
+        g.textAlign = 'left';
+        const item = (i, label, val, color) => {
+          const x = 10 + cell * i + 12;
+          g.font = '800 11px Nunito, sans-serif'; g.fillStyle = '#cfe6ff'; g.fillText(label, x, 25);
+          if (val !== null) { g.font = '900 16px Nunito, sans-serif'; g.fillStyle = color; g.fillText(val, x, 44); }
+        };
+        item(0, L('Высота', 'Altitude'), `${alt.toFixed(0)} ${L('м', 'm')}`, '#fff');
+        item(1, L('Вниз', 'Down'), `${vy.toFixed(1)} ${L('м/с', 'm/s')}`, vy < 2.2 ? '#7ee0a0' : vy < 5 ? '#ffd166' : '#ff8a9a');
+        item(2, L('Вбок', 'Sideways'), `${Math.abs(L_.vx).toFixed(1)} ${L('м/с', 'm/s')}`, Math.abs(L_.vx) < 1.5 ? '#7ee0a0' : '#ffd166');
+        item(3, L('Топливо', 'Fuel'), null);
+        const fx = 10 + cell * 3 + 12, fw = cell - 24;
+        g.fillStyle = 'rgba(255,255,255,0.15)'; g.fillRect(fx, 33, fw, 12);
+        g.fillStyle = L_.fuel > 25 ? '#ffb454' : '#ff5468'; g.fillRect(fx, 33, fw * L_.fuel / 100, 12);
+        item(4, L('Гравитация', 'Gravity'), `${B.g} ${L('м/с²', 'm/s²')}`, '#ffd166');
+        // подсказка, в какую сторону площадка
         if (Math.abs(L_.x - padX) > padW / 2) {
-          g.fillStyle = '#ffd166'; g.font = '900 22px Nunito, sans-serif'; g.textAlign = 'center';
-          g.fillText(padX > L_.x ? L('площадка ▶', 'pad ▶') : L('◀ площадка', '◀ pad'), W / 2, 40);
+          g.fillStyle = '#ffd166'; g.font = '900 20px Nunito, sans-serif'; g.textAlign = 'center';
+          g.fillText(padX > L_.x ? L('площадка ▶', 'pad ▶') : L('◀ площадка', '◀ pad'), w / 2, 80);
         }
+        g.restore();
       }
     }
   }
