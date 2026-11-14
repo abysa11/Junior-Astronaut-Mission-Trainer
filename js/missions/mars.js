@@ -649,12 +649,19 @@ Game.register({
 
         /* ---------- план станции ---------- */
         const DOMES = [
-          { id: 'habitat', x: 0, z: 0, R: 6, dir: Math.PI / 2, name: L('Жилой модуль', 'Habitat') },
-          { id: 'greenhouse', x: -17, z: -3, R: 6.5, dir: 0, glass: true, name: L('Теплица', 'Greenhouse') },
-          { id: 'power', x: 16, z: -3, R: 5.2, dir: Math.PI, name: L('Энергоблок', 'Power room') }
+          { id: 'habitat', x: 0, z: 0, R: 6, doors: [Math.PI / 2, Math.PI, 0], outside: Math.PI / 2, name: L('Жилой модуль', 'Habitat') },
+          { id: 'greenhouse', x: -17, z: 0, R: 6.5, doors: [0], glass: true, name: L('Теплица', 'Greenhouse') },
+          { id: 'power', x: 16, z: 0, R: 5.2, doors: [Math.PI], name: L('Энергоблок', 'Power room') }
         ];
-        const GH = DOMES[1], PW = DOMES[2];
-        const SHIP = { x: 6, z: 24 }, DRILL = { x: -22, z: 13 }, ANT = { x: -4, z: -16 };
+        const HB = DOMES[0], GH = DOMES[1], PW = DOMES[2];
+        // проходы: вход в жилой модуль снаружи и два закрытых коридора (в теплицу и энергоблок только через жилой модуль)
+        const passage = (d, dir, len) => ({ sx: d.x + Math.cos(dir) * (d.R - 1.4), sz: d.z + Math.sin(dir) * (d.R - 1.4), dx: Math.cos(dir), dz: Math.sin(dir), len });
+        const PASSAGES = [
+          passage(HB, Math.PI / 2, 3.2),
+          Object.assign(passage(HB, Math.PI, Math.abs(GH.x) - (HB.R - 1.4) - (GH.R - 1.4)), { to: GH }),
+          Object.assign(passage(HB, 0, PW.x - (HB.R - 1.4) - (PW.R - 1.4)), { to: PW })
+        ];
+        const SHIP = { x: 6, z: 24 }, DRILL = { x: -22, z: 13 }, ANT = { x: -9, z: 21 };
         // точки пультов в мировых координатах
         const POS = {
           garden: { x: GH.x + 4.2, z: GH.z - 3.4 }, power: { x: PW.x, z: PW.z - 3.4 }, radio: { x: 3.0, z: -2.6 },
@@ -762,18 +769,25 @@ Game.register({
         for (let i = 0; i < gp.count; i++) gp.setY(i, groundH(gp.getX(i), gp.getZ(i)));
         gGeo.computeVertexNormals();
         scene.add(new THREE.Mesh(gGeo, toon(0xffbf98, { map: tex(A + 'tex-mars-sand.jpg', 26, 26) })));
-        const pad = new THREE.Mesh(new THREE.CircleGeometry(29, 64), toon(0xf9c3a2));
-        pad.rotation.x = -Math.PI / 2; pad.position.y = 0.02; scene.add(pad);
-        const padRing = new THREE.Mesh(new THREE.RingGeometry(28.6, 29.2, 64), toon(0xff9a3c));
-        padRing.rotation.x = -Math.PI / 2; padRing.position.y = 0.03; scene.add(padRing);
-        // дорожки
-        const pathMat = toon(0xfff4ea);
-        [[0, 5, 2, 22], [-6, -2.2, -10.6, -2.2], [-10.4, -2.2, -10.4, 9], [6, -2.2, 10.6, -2.2], [-10.4, 9, -20, 12], [0, 8, -4, -10], [2, 12, 10, 11.5]].forEach(([x0, z0, x1, z1]) => {
-          const len = Math.hypot(x1 - x0, z1 - z0);
-          const p = new THREE.Mesh(new THREE.PlaneGeometry(1.6, len + 1.6), pathMat);
-          p.rotation.x = -Math.PI / 2; p.rotation.z = Math.atan2(x1 - x0, z1 - z0);
-          p.position.set((x0 + x1) / 2, 0.04, (z0 + z1) / 2); scene.add(p);
+        // площадка станции; дорожки нарисованы прямо на ней, концы скруглены
+        const PAD_R = 29, PAD_PX = 2048;
+        const padT = canvasTex(PAD_PX, PAD_PX, g => {
+          const k = PAD_PX / (PAD_R * 2), X = x => (x + PAD_R) * k, Z = z => (z + PAD_R) * k;
+          g.fillStyle = '#f9c3a2'; g.fillRect(0, 0, PAD_PX, PAD_PX);
+          for (let i = 0; i < 260; i++) { g.fillStyle = i % 2 ? 'rgba(240,170,130,0.35)' : 'rgba(255,215,190,0.35)'; g.beginPath(); g.arc((i * 733) % PAD_PX, (i * 389) % PAD_PX, 8 + (i % 7) * 5, 0, 7); g.fill(); }
+          g.strokeStyle = '#fff4ea'; g.lineWidth = 1.6 * k; g.lineCap = 'round'; g.lineJoin = 'round';
+          [
+            [[0, 7.6], [0, 14], [4.5, 19.3]],      // от входа к кораблю
+            [[0, 11], [-10, 13], [-19.3, 13]],     // к ледяному буру
+            [[-3.5, 12], [-6.5, 13.5], [-8.3, 18.6]], // к антенне
+            [[0, 11], [7, 11.5], [24.5, 11.5]]     // между рядами панелей
+          ].forEach(([p0, c, p1]) => { g.beginPath(); g.moveTo(X(p0[0]), Z(p0[1])); g.quadraticCurveTo(X(c[0]), Z(c[1]), X(p1[0]), Z(p1[1])); g.stroke(); });
         });
+        padT.anisotropy = 8;
+        const pad = new THREE.Mesh(new THREE.CircleGeometry(PAD_R, 96), toon(0xffffff, { map: padT }));
+        pad.rotation.x = -Math.PI / 2; pad.position.y = 0.02; scene.add(pad);
+        const padRing = new THREE.Mesh(new THREE.RingGeometry(PAD_R - 0.4, PAD_R + 0.2, 96), toon(0xff9a3c));
+        padRing.rotation.x = -Math.PI / 2; padRing.position.y = 0.03; scene.add(padRing);
 
         /* ---------- скалы ---------- */
         const obstacles = [];
@@ -836,19 +850,32 @@ Game.register({
         });
         function dome(d) {
           const g = new THREE.Group(); g.position.set(d.x, 0, d.z); scene.add(g);
-          const RING = Math.asin(Math.min(0.9, 2.65 / d.R)); // высота пояса с проёмом двери
-          const phiE = Math.PI - d.dir, gap = Math.asin(1.1 / d.R);
+          const RING = Math.asin(Math.min(0.9, 2.65 / d.R)); // высота пояса с проёмами
+          const gap = Math.asin(1.1 / d.R);
           const shellMat = d.glass
             ? new THREE.MeshToonMaterial({ color: 0xc4f0ff, gradientMap: grad, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false })
             : toon(0xf7f5ff, { side: THREE.DoubleSide });
           const capM = new THREE.Mesh(new THREE.SphereGeometry(d.R, 56, 22, 0, Math.PI * 2, 0, Math.PI / 2 - RING), shellMat);
-          const band = new THREE.Mesh(new THREE.SphereGeometry(d.R, 56, 6, phiE + gap, Math.PI * 2 - gap * 2, Math.PI / 2 - RING, RING), shellMat);
-          if (d.glass) { g.add(capM); g.add(band); } else { add(capM, g, 0.07); add(band, g, 0); }
+          if (d.glass) g.add(capM); else add(capM, g, 0.07);
+          // нижний пояс и цоколь — кусками между проёмами
+          const TAU = Math.PI * 2, norm = a => ((a % TAU) + TAU) % TAU;
+          const segs = start => {
+            const cs = d.doors.map(dir => norm(start(dir))).sort((x, y) => x - y);
+            return cs.map((c, i) => { const n = i + 1 < cs.length ? cs[i + 1] : cs[0] + TAU; return [c + gap, n - c - gap * 2]; });
+          };
+          segs(dir => Math.PI - dir).forEach(([st, len]) => {
+            const band = new THREE.Mesh(new THREE.SphereGeometry(d.R, 48, 6, st, len, Math.PI / 2 - RING, RING), shellMat);
+            if (d.glass) g.add(band); else add(band, g, 0);
+          });
+          segs(dir => Math.PI / 2 - dir).forEach(([st, len]) => {
+            const base = new THREE.Mesh(new THREE.CylinderGeometry(d.R + 0.08, d.R + 0.15, 0.35, 48, 1, true, st, len), toon(0x8f8bc4, { side: THREE.DoubleSide }));
+            base.position.y = 0.17; g.add(base);
+          });
           // каркас: рёбра и кольца
           const ribMat = d.glass ? orange : lav;
           for (let i = 0; i < 10; i++) {
             const a = i / 10 * Math.PI * 2 + 0.31;
-            if (Math.abs(Math.atan2(Math.sin(a - d.dir), Math.cos(a - d.dir))) < 0.35) continue;
+            if (d.doors.some(dir => Math.abs(Math.atan2(Math.sin(a - dir), Math.cos(a - dir))) < 0.35)) continue;
             const pts = [];
             for (let k = 0; k <= 16; k++) { const t = k / 16 * Math.PI / 2; pts.push(new THREE.Vector3(Math.cos(a) * Math.cos(t) * (d.R + 0.03), Math.sin(t) * (d.R + 0.03), Math.sin(a) * Math.cos(t) * (d.R + 0.03))); }
             g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, d.glass ? 0.1 : 0.07, 6, false), ribMat));
@@ -857,50 +884,55 @@ Game.register({
             const ring = new THREE.Mesh(new THREE.TorusGeometry(Math.cos(f) * d.R + 0.03, d.glass ? 0.1 : 0.08, 6, 72), ribMat);
             ring.rotation.x = Math.PI / 2; ring.position.y = Math.sin(f) * d.R; g.add(ring);
           });
-          // цоколь — тёмная полоска у земли
-          const base = new THREE.Mesh(new THREE.CylinderGeometry(d.R + 0.08, d.R + 0.15, 0.35, 56, 1, true, Math.PI / 2 - d.dir + gap, Math.PI * 2 - gap * 2), toon(0x8f8bc4, { side: THREE.DoubleSide }));
-          base.position.y = 0.17; g.add(base);
-          // макушка
           const top = add(new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.0, 0.35, 24), d.glass ? orange : lav), g, 0.04); top.position.y = d.R - 0.05;
-          // пол
           const fl = new THREE.Mesh(new THREE.CircleGeometry(d.R - 0.05, 48), d.glass ? toon(0xf6e6cf) : toon(0xffffff, { map: floorT }));
           fl.rotation.x = -Math.PI / 2; fl.position.y = 0.06; g.add(fl);
-          // входной тамбур с арочным проёмом — закрывает края выреза в куполе
-          const dirV = new THREE.Vector3(Math.cos(d.dir), 0, Math.sin(d.dir));
-          const rotY = Math.atan2(dirV.x, dirV.z);
-          const ts = arch(new THREE.Shape(), 3.1, 3.2); ts.holes.push(arch(new THREE.Path(), 2.0, 2.5));
-          const tunnel = add(new THREE.Mesh(new THREE.ExtrudeGeometry(ts, { depth: 2.7, bevelEnabled: true, bevelThickness: 0.08, bevelSize: 0.08, bevelSegments: 2, curveSegments: 24 }), white), g, 0.05);
-          tunnel.rotation.y = rotY; tunnel.position.copy(dirV.clone().multiplyScalar(d.R - 1.3));
-          const fs = arch(new THREE.Shape(), 3.5, 3.45); fs.holes.push(arch(new THREE.Path(), 2.0, 2.5));
-          const frame = add(new THREE.Mesh(new THREE.ExtrudeGeometry(fs, { depth: 0.3, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.05, bevelSegments: 2, curveSegments: 24 }), d.glass ? toon(0x6b5fd8) : orange), g, 0.05);
-          frame.rotation.y = rotY; frame.position.copy(dirV.clone().multiplyScalar(d.R + 1.4));
-          // огоньки по арке
-          for (let k = 0; k < 7; k++) {
-            const a = k / 6 * Math.PI, lx = Math.cos(a) * 1.35, ly = 2.5 - 1.0 + Math.sin(a) * 1.35;
-            const b = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), new THREE.MeshBasicMaterial({ color: k % 2 ? 0x5fd8ff : 0xffe066 }));
-            b.position.copy(dirV.clone().multiplyScalar(d.R + 1.75)).add(new THREE.Vector3(-dirV.z * lx, ly, dirV.x * lx)); g.add(b);
+          // наружный вход (только у жилого модуля): тамбур, оранжевая арка и табличка
+          if (d.outside !== undefined) {
+            const dirV = new THREE.Vector3(Math.cos(d.outside), 0, Math.sin(d.outside));
+            const rotY = Math.atan2(dirV.x, dirV.z);
+            const ts = arch(new THREE.Shape(), 3.1, 3.2); ts.holes.push(arch(new THREE.Path(), 2.0, 2.5));
+            const tunnel = add(new THREE.Mesh(new THREE.ExtrudeGeometry(ts, { depth: 2.7, bevelEnabled: true, bevelThickness: 0.08, bevelSize: 0.08, bevelSegments: 2, curveSegments: 24 }), white), g, 0.05);
+            tunnel.rotation.y = rotY; tunnel.position.copy(dirV.clone().multiplyScalar(d.R - 1.3));
+            const fs = arch(new THREE.Shape(), 3.5, 3.45); fs.holes.push(arch(new THREE.Path(), 2.0, 2.5));
+            const frame = add(new THREE.Mesh(new THREE.ExtrudeGeometry(fs, { depth: 0.3, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.05, bevelSegments: 2, curveSegments: 24 }), orange), g, 0.05);
+            frame.rotation.y = rotY; frame.position.copy(dirV.clone().multiplyScalar(d.R + 1.4));
+            const tf = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 3.2), toon(0xeae6ff));
+            tf.rotation.x = -Math.PI / 2; tf.rotation.z = rotY;
+            tf.position.copy(dirV.clone().multiplyScalar(d.R + 0.1)).setY(0.07); g.add(tf);
+            const sign = canvasSign(d.name, '#6b5fd8');
+            sign.position.copy(dirV.clone().multiplyScalar(d.R + 1.8)).setY(3.95); sign.rotation.y = rotY; g.add(sign);
           }
-          const tf = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 3.2), toon(0xeae6ff));
-          tf.rotation.x = -Math.PI / 2; tf.rotation.z = rotY;
-          tf.position.copy(dirV.clone().multiplyScalar(d.R + 0.1)).setY(0.07); g.add(tf);
-          // коврик у входа
-          const mat = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 1.4), toon(d.glass ? 0x7ee0a0 : 0xff9a3c));
-          mat.rotation.x = -Math.PI / 2; mat.rotation.z = rotY; mat.position.copy(dirV.clone().multiplyScalar(d.R + 2.6)).setY(0.05); g.add(mat);
-          const sign = canvasSign(d.name, d.glass ? '#ff9a3c' : '#6b5fd8');
-          sign.position.copy(dirV.clone().multiplyScalar(d.R + 1.8)).setY(3.95); sign.rotation.y = rotY; g.add(sign);
           const pl = new THREE.PointLight(d.glass ? 0xffc0ea : 0xfff0d8, 4, d.R * 2.6, 1.3);
           pl.position.set(0, d.R * 0.7, 0); g.add(pl);
           d.group = g;
         }
         DOMES.forEach(dome);
-        // трубы-переходы между куполами (декор + препятствие)
-        [[-5.6, -10.5], [5.6, 10.8]].forEach(([a, b]) => {
-          const len = Math.abs(b - a);
-          const tube = add(new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, len, 24), white), scene, 0.04);
-          tube.rotation.z = Math.PI / 2; tube.position.set((a + b) / 2, 0.85, -2.2);
-          [0.25, 0.75].forEach(f => { const r = new THREE.Mesh(new THREE.TorusGeometry(0.8, 0.09, 8, 24), orange); r.rotation.y = Math.PI / 2; r.position.set(a + (b - a) * f, 0.85, -2.2); scene.add(r); });
-          for (let k = 0; k <= 6; k++) obstacles.push({ x: a + (b - a) * k / 6, z: -2.2, r: 0.8 });
+        // закрытые коридоры от жилого модуля к теплице и энергоблоку
+        PASSAGES.filter(p => p.to).forEach(p => {
+          const rotY = Math.atan2(p.dx, p.dz), len = p.len + 0.2;
+          const ts = arch(new THREE.Shape(), 3.1, 3.2); ts.holes.push(arch(new THREE.Path(), 2.0, 2.5));
+          const tube = add(new THREE.Mesh(new THREE.ExtrudeGeometry(ts, { depth: len, bevelEnabled: false, curveSegments: 24 }), white), scene, 0.05);
+          tube.rotation.y = rotY; tube.position.set(p.sx - p.dx * 0.1, 0, p.sz - p.dz * 0.1);
+          const fs = arch(new THREE.Shape(), 3.4, 3.4); fs.holes.push(arch(new THREE.Path(), 2.0, 2.5));
+          const ribGeo = new THREE.ExtrudeGeometry(fs, { depth: 0.3, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.04, bevelSegments: 2, curveSegments: 24 });
+          const t0 = 1.7, t1 = len - 1.7; // рёбра — только на открытой части коридора, между куполами
+          for (let k = 0; k < 3; k++) {
+            const t = t0 + (t1 - t0) * k / 2;
+            const r = add(new THREE.Mesh(ribGeo, p.to.glass ? toon(0x7ee0a0) : orange), scene, 0.04);
+            r.rotation.y = rotY; r.position.set(p.sx + p.dx * (t - 0.15), 0, p.sz + p.dz * (t - 0.15));
+          }
+          const fl = new THREE.Mesh(new THREE.PlaneGeometry(2.0, len), toon(0xeae6ff));
+          fl.rotation.x = -Math.PI / 2; fl.rotation.z = rotY;
+          fl.position.set(p.sx + p.dx * len / 2, 0.07, p.sz + p.dz * len / 2); scene.add(fl);
+          // табличка на коридоре снаружи (видна с площадки) и над проходом внутри жилого модуля
+          const outS = canvasSign(p.to.name, p.to.glass ? '#ff9a3c' : '#6b5fd8');
+          outS.position.set(p.sx + p.dx * len / 2, 3.75, p.sz + p.dz * len / 2); scene.add(outS);
+          const inS = canvasSign(p.to.name, p.to.glass ? '#ff9a3c' : '#6b5fd8');
+          inS.scale.setScalar(0.7);
+          inS.position.set(p.sx - p.dx * 0.3, 2.85, p.sz); inS.rotation.y = rotY + Math.PI; scene.add(inS);
         });
+
 
         /* ---------- экран-табло на CanvasTexture ---------- */
         function screenMesh(w, hgt, draw) {
@@ -1195,14 +1227,13 @@ Game.register({
         // столкновения с куполами: стену можно пройти только через тамбур
         function free(x, z) {
           if (Math.hypot(x, z) > 52) return false;
-          for (const d of DOMES) {
-            const dx = x - d.x, dz = z - d.z, dist = Math.hypot(dx, dz);
-            const fx = Math.cos(d.dir), fz = Math.sin(d.dir);
-            const along = dx * fx + dz * fz, across = Math.abs(dx * -fz + dz * fx);
-            const inTunnel = along > d.R - 1.8 && along < d.R + 2.0 && across < 0.75;
-            if (dist < d.R + 0.4 && dist > d.R - 0.6 && !inTunnel) return false;
-            if (along > d.R - 1.4 && along < d.R + 1.8 && across > 0.75 && across < 1.9) return false;
+          let inPass = false;
+          for (const p of PASSAGES) {
+            const rx = x - p.sx, rz = z - p.sz, along = rx * p.dx + rz * p.dz, across = Math.abs(rx * -p.dz + rz * p.dx);
+            if (along > -0.4 && along < p.len + 0.4 && across < 0.75) inPass = true;
+            if (along > 0 && along < p.len && across > 0.75 && across < 1.9) return false;
           }
+          if (!inPass) for (const d of DOMES) { const dist = Math.hypot(x - d.x, z - d.z); if (dist < d.R + 0.4 && dist > d.R - 0.6) return false; }
           for (const o of obstacles) if (Math.hypot(o.x - x, o.z - z) < o.r + 0.3) return false;
           return true;
         }
@@ -1366,6 +1397,7 @@ Game.register({
           mg.clearRect(0, 0, W, H);
           mg.fillStyle = '#ffb48a'; mg.fillRect(0, 0, W, H);
           mg.fillStyle = '#ffdcc6'; mg.beginPath(); mg.arc(X(0), Y(0), 29 * sc, 0, 7); mg.fill();
+          PASSAGES.filter(p => p.to).forEach(p => { mg.strokeStyle = '#2b2a6b'; mg.lineWidth = 5; mg.beginPath(); mg.moveTo(X(p.sx), Y(p.sz)); mg.lineTo(X(p.sx + p.dx * p.len), Y(p.sz + p.dz * p.len)); mg.stroke(); mg.strokeStyle = '#fff'; mg.lineWidth = 3; mg.stroke(); });
           DOMES.forEach(d => { mg.fillStyle = d.glass ? '#9fe8ff' : '#ffffff'; mg.strokeStyle = '#2b2a6b'; mg.lineWidth = 1.5; mg.beginPath(); mg.arc(X(d.x), Y(d.z), d.R * sc, 0, 7); mg.fill(); mg.stroke(); });
           PANELS.forEach(p => { mg.fillStyle = p.clean ? '#2a55e0' : '#b9774c'; mg.fillRect(X(p.x) - 3, Y(p.z) - 2, 6, 4); });
           mg.fillStyle = '#ff5d6c'; mg.beginPath(); mg.arc(X(SHIP.x), Y(SHIP.z), 4, 0, 7); mg.fill();
