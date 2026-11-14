@@ -6,7 +6,7 @@
    Все картинки — из Higgsfield (assets/mars/).
    ===================================================================== */
 Game.register({
-  id: 'mars', order: 5, img: 'mars', final: true,
+  id: 'mars', order: 7, img: 'mars', final: true,
   get tag() { return L('Финал', 'Final'); },
   get title() { return L('Последний шанс на Марсе', 'Last Chance on Mars'); },
   get situation() { return L('Авария! Корабль сел на Марс без топлива. Рядом — заброшенный корабль прошлой экспедиции. Найди детали и улети домой.', 'Crash! The ship landed on Mars with no fuel. Nearby is an abandoned ship from an earlier expedition. Find the parts and fly home.'); },
@@ -192,7 +192,7 @@ Game.register({
         }
         function flatness(x, z) {
           const a = smooth(11, 5, Math.hypot(x - OS.x, z - OS.z));
-          const dx = Math.max(HULL.x0 - 5 - x, 0, x - (HULL.x1 + 5)), dz = Math.max(Math.abs(z - HULL.z) - 6, 0);
+          const dx = Math.max(-8 - x, 0, x - (HULL.x1 + 7)), dz = Math.max(Math.abs(z - HULL.z) - 6, 0);
           const b = smooth(7, 0, Math.hypot(dx, dz));
           return Math.max(a, b);
         }
@@ -317,25 +317,85 @@ Game.register({
           if (s > 0.9) obstacles.push({ x, z, r: s * 0.95 });
         }
 
-        /* ---------- наш корабль «Звёздный вихрь» ---------- */
-        const shipSpr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex('assets/sprites/ship.png') }));
-        shipSpr.scale.set(12, 8.07, 1);
-        shipSpr.position.set(OS.x, groundH(OS.x, OS.z) + 3.3, OS.z);
-        scene.add(shipSpr);
-        obstacles.push({ x: OS.x, z: OS.z, r: 3.2 });
+        /* ---------- наш корабль «Звёздный вихрь»: 3D-ракета как на картинке ship.png ---------- */
+        const ourShip = new THREE.Group();
+        {
+          const white = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x3a3650, roughness: 0.35, metalness: 0.05 });
+          const orange = new THREE.MeshStandardMaterial({ color: 0xff8f2e, roughness: 0.45, metalness: 0.1 });
+          const steel = new THREE.MeshStandardMaterial({ color: 0x8f8bc4, roughness: 0.3, metalness: 0.7 });
+          // корпус: округлая ракета (профиль вращения)
+          const prof = [[0.001, 0.4], [1.15, 0.55], [1.55, 1.3], [1.75, 2.6], [1.7, 3.8], [1.45, 4.8], [1.0, 5.7], [0.45, 6.35], [0.001, 6.6]]
+            .map(([r, y]) => new THREE.Vector2(r, y));
+          const body = new THREE.Mesh(new THREE.LatheGeometry(new THREE.SplineCurve(prof).getPoints(40), 48), white);
+          ourShip.add(body);
+          // оранжевые пояса
+          [[1.3, 1.73], [4.25, 1.6]].forEach(([y, r]) => {
+            const band = new THREE.Mesh(new THREE.TorusGeometry(r, 0.09, 10, 48), orange);
+            band.rotation.x = Math.PI / 2; band.position.y = y; ourShip.add(band);
+          });
+          // иллюминатор с рамкой
+          const win = new THREE.Mesh(new THREE.SphereGeometry(0.62, 32, 16), new THREE.MeshStandardMaterial({ color: 0x46d4ff, emissive: 0x0b5a8a, roughness: 0.05, metalness: 0.4 }));
+          win.scale.z = 0.45; win.position.set(0, 3.5, 1.62); ourShip.add(win);
+          const rim = new THREE.Mesh(new THREE.TorusGeometry(0.66, 0.11, 12, 40), steel);
+          rim.position.set(0, 3.5, 1.66); ourShip.add(rim);
+          // три стабилизатора
+          for (let i = 0; i < 3; i++) {
+            const sh = new THREE.Shape();
+            sh.moveTo(0, 0); sh.lineTo(1.6, -0.6); sh.lineTo(1.7, 0.4); sh.lineTo(0, 2.4); sh.closePath();
+            const fin = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: 0.16, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.05, bevelSegments: 2 }), orange);
+            fin.position.set(0, 0.7, 0);
+            const holder = new THREE.Group();
+            fin.position.x = 1.45; fin.position.z = -0.08;
+            holder.add(fin); holder.rotation.y = i * Math.PI * 2 / 3 + 0.5;
+            ourShip.add(holder);
+          }
+          // сопло и опоры
+          const noz = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 1.0, 0.8, 28, 1, true), new THREE.MeshStandardMaterial({ color: 0x5d5a86, roughness: 0.3, metalness: 0.8, side: THREE.DoubleSide }));
+          noz.position.y = 0.2; ourShip.add(noz);
+          for (let i = 0; i < 3; i++) {
+            const a = i * Math.PI * 2 / 3 + 0.5 + Math.PI / 3;
+            const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 2.2, 8), steel);
+            leg.position.set(Math.cos(a) * 1.7, 0.2, Math.sin(a) * 1.7); leg.rotation.set(Math.sin(a) * 0.45, 0, -Math.cos(a) * 0.45);
+            ourShip.add(leg);
+            const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.4, 0.12, 16), steel);
+            foot.position.set(Math.cos(a) * 2.15, -0.75, Math.sin(a) * 2.15); ourShip.add(foot);
+          }
+        }
+        ourShip.scale.setScalar(1.15);
+        ourShip.position.set(OS.x, groundH(OS.x, OS.z) + 0.95, OS.z);
+        ourShip.rotation.set(0.08, 2.0, -0.08); // чуть накренился после аварийной посадки
+        scene.add(ourShip);
+        // дым из повреждённого двигателя
+        const smokeTex = (() => {
+          const c = document.createElement('canvas'); c.width = c.height = 64;
+          const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 2, 32, 32, 32);
+          gr.addColorStop(0, 'rgba(85,78,98,0.9)'); gr.addColorStop(0.5, 'rgba(110,100,120,0.45)'); gr.addColorStop(1, 'rgba(120,110,130,0)');
+          g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+          const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+        })();
+        const SMOKE = [];
+        for (let i = 0; i < 14; i++) {
+          const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: smokeTex, transparent: true, depthWrite: false }));
+          scene.add(sp); SMOKE.push({ sp, t: i / 14 });
+        }
+        obstacles.push({ x: OS.x, z: OS.z, r: 2.8 });
 
         /* ---------- заброшенный корабль: обтекаемый корпус ---------- */
         // профиль корпуса вдоль оси X: острый нос с кабиной, ровная середина, сужение к двигателям
-        const NOSE = 1.6, TAIL = 33.4;
+        const NOSE = -3.5, TAIL = 33.4;
         function hullR(x) {
           if (x <= NOSE) return 0;
-          if (x < HULL.x0) { const t = (HULL.x0 - x) / (HULL.x0 - NOSE); return HULL.R * Math.sqrt(1 - t * t); }
+          if (x < HULL.x0) { const t = (HULL.x0 - x) / (HULL.x0 - NOSE); return HULL.R * Math.sqrt(1 - t * t) * (1 - 0.32 * t); } // заострённый нос
           if (x <= 29) return HULL.R;
           return HULL.R - (x - 29) / (TAIL - 29) * 0.75;
         }
         const ship3d = new THREE.Group();
         scene.add(ship3d);
-        const outerMat = (len) => new THREE.MeshStandardMaterial({ map: tex(A + 'tex-hull-smooth.jpg', 5, len / 4.5), roughness: 0.45, metalness: 0.15, side: THREE.DoubleSide });
+        const outerMat = (len, x0) => {
+          const bump = tex(A + 'tex-hull-smooth.jpg', 4, len / 6);
+          bump.offset.y = (x0 - NOSE) / 6; // узор непрерывный между частями корпуса
+          return new THREE.MeshStandardMaterial({ color: 0xf1effa, bumpMap: bump, bumpScale: 1.4, roughness: 0.42, metalness: 0.12, side: THREE.DoubleSide });
+        };
         const innerMat = (len) => new THREE.MeshStandardMaterial({ map: tex(A + 'tex-ship-wall.jpg', 7, len / 3), side: THREE.DoubleSide, roughness: 0.8 });
         // проём люка на южной стороне (+z): углы, где высота от пола 0.4 до 2.75
         const gA = -Math.asin((2.75 - HULL.cy) / HULL.R) - 0.03, gB = -Math.asin((HULL.floor - HULL.cy) / HULL.R) + 0.03;
@@ -355,15 +415,24 @@ Game.register({
         }
         const HX0 = HATCH.x - 1.15, HX1 = HATCH.x + 1.15;
         [[NOSE, HX0, false], [HX0, HX1, true], [HX1, TAIL, false]].forEach(([a, b, gap]) => {
-          lathe(a, b, 0, outerMat(b - a), gap);
+          lathe(a, b, 0, outerMat(b - a, a), gap);
           lathe(Math.max(a, HULL.x0 - 0.2), b, 0.2, innerMat(b - a), gap);
+        });
+        // голубые полосы вдоль бортов
+        const stripeMat = new THREE.MeshStandardMaterial({ color: 0x4fc8ff, roughness: 0.4, side: THREE.DoubleSide });
+        [[-0.44, 0.1], [Math.PI + 0.34, 0.1]].forEach(([phi, w]) => {
+          const pts = [];
+          for (let x = 2.5; x <= 30.5; x += 0.5) pts.push(new THREE.Vector2(hullR(x) + 0.03, x));
+          const g = new THREE.LatheGeometry(pts, 4, phi, w);
+          g.rotateZ(-Math.PI / 2);
+          const m = new THREE.Mesh(g, stripeMat); m.position.set(0, HULL.cy, HULL.z); ship3d.add(m);
         });
         // стекло кабины на носу
         const glass = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2),
           new THREE.MeshStandardMaterial({ color: 0x3fc6ff, emissive: 0x0b4a7a, roughness: 0.1, metalness: 0.3, transparent: true, opacity: 0.85 }));
-        glass.scale.set(2.6, 1.0, 1.6);
-        glass.rotation.z = -0.32;
-        glass.position.set(5.6, HULL.cy + 1.75, HULL.z);
+        glass.scale.set(3.4, 1.05, 1.5);
+        glass.rotation.z = -0.22;
+        glass.position.set(3.4, HULL.cy + 1.45, HULL.z);
         ship3d.add(glass);
         // пол
         const floorLen = HULL.x1 - HULL.x0;
@@ -386,15 +455,27 @@ Game.register({
         const back = new THREE.Mesh(new THREE.CircleGeometry(hullR(TAIL), 48), metal);
         back.rotation.y = Math.PI / 2; back.position.set(TAIL, HULL.cy, HULL.z);
         ship3d.add(back);
-        [[0, 1.0], [0.95, -0.6], [-0.95, -0.6]].forEach(([dz, dy]) => {
-          const noz = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 1.05, 1.6, 28, 1, true), new THREE.MeshStandardMaterial({ color: 0x5d5a86, roughness: 0.3, metalness: 0.8, side: THREE.DoubleSide }));
-          noz.rotation.z = -Math.PI / 2;
-          noz.position.set(TAIL + 0.8, HULL.cy + dy, HULL.z + dz * 1.3);
-          ship3d.add(noz);
-          const glow = new THREE.Mesh(new THREE.CircleGeometry(0.72, 24), new THREE.MeshBasicMaterial({ color: 0x3a2a4a }));
-          glow.rotation.y = Math.PI / 2; glow.position.set(TAIL + 0.3, HULL.cy + dy, HULL.z + dz * 1.3);
-          ship3d.add(glow);
+        const darkMetal = new THREE.MeshStandardMaterial({ color: 0x55527e, roughness: 0.3, metalness: 0.8, side: THREE.DoubleSide });
+        const hullMatSmall = new THREE.MeshStandardMaterial({ map: tex(A + 'tex-hull-smooth.jpg', 2, 2), roughness: 0.45, metalness: 0.15 });
+        [1, -1].forEach(side => {
+          const z = HULL.z + side * (HULL.R + 0.85), y = HULL.cy + 0.5;
+          const pod = new THREE.Mesh(new THREE.CylinderGeometry(1.25, 1.35, 8.5, 32), hullMatSmall);
+          pod.rotation.z = Math.PI / 2; pod.position.set(29.5, y, z); ship3d.add(pod);
+          const intake = new THREE.Mesh(new THREE.TorusGeometry(1.25, 0.18, 12, 32), finMatLate());
+          intake.rotation.y = Math.PI / 2; intake.position.set(25.25, y, z); ship3d.add(intake);
+          const intakeHole = new THREE.Mesh(new THREE.CircleGeometry(1.15, 32), new THREE.MeshBasicMaterial({ color: 0x2a2440 }));
+          intakeHole.rotation.y = -Math.PI / 2; intakeHole.position.set(25.2, y, z); ship3d.add(intakeHole);
+          const noz = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.35, 1.4, 32, 1, true), darkMetal);
+          noz.rotation.z = -Math.PI / 2; noz.position.set(34.4, y, z); ship3d.add(noz);
+          const glowC = new THREE.Mesh(new THREE.CircleGeometry(1.0, 28), new THREE.MeshBasicMaterial({ color: 0x3a2a4a }));
+          glowC.rotation.y = Math.PI / 2; glowC.position.set(34.0, y, z); ship3d.add(glowC);
+          // посадочная опора, наполовину в песке
+          const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 2.6, 10), metal);
+          leg.position.set(27, 0.2, z + side * 0.9); leg.rotation.x = side * 0.35; ship3d.add(leg);
         });
+        const midNoz = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.2, 1.2, 28, 1, true), darkMetal);
+        midNoz.rotation.z = -Math.PI / 2; midNoz.position.set(TAIL + 0.6, HULL.cy, HULL.z); ship3d.add(midNoz);
+        function finMatLate() { return new THREE.MeshStandardMaterial({ color: 0xffa04a, roughness: 0.5 }); }
         // крылья и киль (оранжевые, как на нашем корабле)
         const finMat = new THREE.MeshStandardMaterial({ map: tex(A + 'tex-hull-smooth.jpg', 0.25, 0.25), color: 0xffa04a, roughness: 0.5, metalness: 0.1 });
         function wing(side) {
@@ -758,6 +839,13 @@ Game.register({
         }
 
         function animate(dt) {
+          SMOKE.forEach(p => {
+            p.t = (p.t + dt * 0.12) % 1;
+            const k = p.t;
+            p.sp.position.set(OS.x - 0.6 + k * 2.5, groundH(OS.x, OS.z) + 1.2 + k * 9, OS.z + 0.8 + Math.sin(k * 6 + p.t) * 0.6);
+            const sc = 1.2 + k * 4.5; p.sp.scale.set(sc, sc, 1);
+            p.sp.material.opacity = (1 - k) * 0.75;
+          });
           // предметы покачиваются и светятся
           PICKS.forEach(p => {
             if (p.gone) return;

@@ -595,3 +595,88 @@ input[type=range] { width: 100%; accent-color: var(--orange); height: 30px; }
 .fp-loading .bar { display: block; width: 60%; max-width: 280px; height: 10px; border-radius: 6px; background: rgba(255, 255, 255, 0.15); overflow: hidden; }
 .fp-loading .bar i { display: block; width: 0; height: 100%; background: linear-gradient(90deg, var(--glow), var(--orange)); transition: width 0.2s; }
 .fp-loading[hidden], .fp-prompt[hidden] { display: none !important; }
+
+/* =====================================================================
+   Выбор места (база, посадка)
+   ===================================================================== */
+.place-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
+.place-card { font: inherit; color: var(--ink); text-align: left; cursor: pointer; border: 0; background: none; padding: 10px 10px 16px; display: flex; flex-direction: column; gap: 6px; transition: transform 0.2s; }
+.place-card:hover { transform: translateY(-4px); }
+.place-card .ph { display: block; aspect-ratio: 16 / 9; border-radius: 10px; background: center / cover; }
+.place-card h3 { margin: 6px 4px 0; font-size: 1.3rem; }
+.place-card ul { margin: 0 0 8px; padding-left: 22px; font-size: 0.93rem; }
+.place-card .btn { align-self: flex-start; margin-left: 4px; }
+
+/* =====================================================================
+   Симулятор базы
+   ===================================================================== */
+.base-top { padding: 10px; }
+.base-scene { position: relative; aspect-ratio: 16 / 5; border-radius: 12px; background: center 62% / cover; overflow: hidden; }
+.sol-badge { position: absolute; left: 12px; top: 12px; padding: 8px 14px; min-width: 170px; }
+.sol-badge .eyebrow { color: var(--cyan); margin: 0; }
+.sol-badge b { display: block; font-family: var(--head); font-weight: 400; font-size: 1.4rem; }
+.sol-badge .bar { display: block; height: 6px; margin: 4px 0; background: rgba(255, 255, 255, 0.15); }
+.speed { position: absolute; right: 12px; top: 12px; display: flex; gap: 6px; }
+.speed .btn.on { color: #5a2600; text-shadow: none; background: linear-gradient(180deg, #fff1b8, var(--glow) 35%, var(--orange)); }
+.res-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-top: 10px; }
+.res { padding: 8px 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.75); border: 2px solid var(--metal-3); }
+.res.low { border-color: var(--bad); animation: blink 1s infinite; }
+.res .r-name { font-family: var(--head); font-size: 0.75rem; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.06em; }
+.res .r-val { font-weight: 900; font-size: 1.05rem; }
+.res .bar { height: 8px; margin: 4px 0; }
+.res .r-d { font-size: 0.78rem; font-weight: 800; }
+.neg { color: #d12f45; } .pos { color: #128a55; }
+.base-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; margin-top: 14px; }
+.base-grid .card { margin: 0; padding: 16px; }
+.crew { display: grid; gap: 8px; }
+.crew-card { padding: 8px 10px; border-radius: 10px; background: #fff; border: 2px solid var(--metal-3); }
+.crew-card.gone { opacity: 0.5; filter: grayscale(1); }
+.crew-card .c-top { display: flex; align-items: center; gap: 8px; }
+.crew-card .c-top img { width: 34px; height: 34px; }
+.crew-card .c-top em { margin-left: auto; font-size: 0.75rem; color: var(--bad); font-style: normal; font-weight: 800; }
+.crew-card .c-bars { display: grid; grid-template-columns: auto 1fr; gap: 3px 8px; align-items: center; font-size: 0.75rem; font-weight: 800; color: var(--ink-soft); margin: 4px 0 6px; }
+.crew-card .bar { height: 7px; }
+.crew-card .bar.hp i { background: linear-gradient(90deg, #ff8a9a, var(--good)); }
+.crew-card .bar.mood i { background: linear-gradient(90deg, #8a7ff0, var(--cyan)); }
+.crew-card .warn { color: var(--bad); }
+.tasks { display: flex; flex-wrap: wrap; gap: 4px; }
+.tasks button { font: inherit; font-size: 0.74rem; font-weight: 800; padding: 5px 8px; border-radius: 6px; cursor: pointer; border: 2px solid var(--metal-3); background: #fff; color: var(--ink-soft); }
+.tasks button.on { background: linear-gradient(180deg, var(--screen-1), var(--screen-2)); border-color: var(--cyan); color: #fff; }
+.energy { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 10px 12px; margin-bottom: 10px; }
+.energy > div { display: flex; flex-direction: column; }
+.energy span { font-size: 0.72rem; color: var(--cyan); font-family: var(--head); }
+.energy b { font-family: var(--head); font-weight: 400; font-size: 1.3rem; }
+.energy .neg { color: #ff9aa6; } .energy .pos { color: #9ff0c0; }
+.energy .small { grid-column: 1 / -1; font-size: 0.75rem; opacity: 0.85; }
+.sys, .farm-row, .comms-box { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 10px; background: #fff; border: 2px solid var(--metal-3); margin-bottom: 6px; cursor: pointer; }
+.farm-row, .comms-box { cursor: default; }
+.sys.off { opacity: 0.6; }
+.sys.broken { border-color: var(--bad); background: #ffeef0; }
+.sys:not(.off) .switch { background: var(--good); }
+.sys:not(.off) .switch::after { left: 28px; }
+.mod { width: 46px; height: 46px; object-fit: contain; flex: 0 0 auto; }
+.s-main { flex: 1; display: flex; flex-direction: column; }
+.s-main b { font-family: var(--head); font-weight: 400; font-size: 0.92rem; }
+.s-main span { font-size: 0.78rem; color: var(--ink-soft); }
+.seg.wide { display: flex; flex-direction: row; width: 100%; gap: 4px; margin-top: 6px; }
+.seg.wide button { flex: 1; }
+.seg.wide button.on { background: linear-gradient(180deg, var(--screen-1), var(--screen-2)); border-color: var(--cyan); color: #fff; }
+.build { display: grid; gap: 6px; }
+.build-btn { font: inherit; display: flex; align-items: center; gap: 10px; text-align: left; padding: 6px 8px; border-radius: 10px; cursor: pointer; border: 2px solid var(--metal-3); background: #fff; color: var(--ink); }
+.build-btn:hover:not(:disabled) { border-color: var(--violet); }
+.build-btn:disabled { opacity: 0.55; cursor: default; }
+.build-btn span { display: flex; flex-direction: column; }
+.build-btn em { font-style: normal; font-size: 0.76rem; color: var(--ink-soft); }
+.log { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 4px; max-height: 340px; overflow-y: auto; font-size: 0.85rem; }
+.log li { padding: 5px 8px; border-radius: 6px; background: rgba(107, 95, 216, 0.08); border-left: 4px solid var(--metal-3); }
+.log li.good { border-color: var(--good); background: #e9faf1; }
+.log li.bad { border-color: var(--bad); background: #fff0f2; }
+.log li span { font-family: var(--head); font-size: 0.7rem; color: var(--violet); margin-right: 6px; }
+.log.big { max-height: none; }
+.chart { width: 100%; height: auto; display: block; margin: 8px 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 0.85rem; font-weight: 800; margin-bottom: 12px; }
+.legend span::before { content: ''; display: inline-block; width: 14px; height: 4px; border-radius: 2px; background: var(--c); margin-right: 6px; vertical-align: middle; }
+
+/* Посадка: кнопки управления на телефоне */
+.lander-pad { display: flex; gap: 10px; margin-top: 12px; padding: 12px; }
+.lander-pad .btn { flex: 1; padding: 22px 6px; touch-action: none; user-select: none; -webkit-user-select: none; }
