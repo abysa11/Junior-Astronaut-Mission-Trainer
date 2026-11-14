@@ -120,9 +120,9 @@
   const RANKS = [
     { min: 0, ru: 'Кадет', en: 'Cadet' },
     { min: 3, ru: 'Стажёр', en: 'Trainee' },
-    { min: 7, ru: 'Бортинженер', en: 'Flight Engineer' },
-    { min: 13, ru: 'Пилот', en: 'Pilot' },
-    { min: 21, ru: 'Командир миссии', en: 'Mission Commander' }
+    { min: 6, ru: 'Бортинженер', en: 'Flight Engineer' },
+    { min: 11, ru: 'Пилот', en: 'Pilot' },
+    { min: 18, ru: 'Командир миссии', en: 'Mission Commander' }
   ];
   function totalStars() { return missions.reduce((s, m) => s + (save.best[m.id] || 0), 0); }
   function rank() { const t = totalStars(); const r = RANKS.filter(x => t >= x.min).pop(); return L(r.ru, r.en); }
@@ -172,8 +172,7 @@
             <li><i class="thumb" style="background-image:url('assets/img/storm.jpg')"></i><div><b>${L('Солнечная буря', 'Solar storm')}</b><span>${L('защита', 'protection')}</span></div></li>
             <li><i class="thumb" style="background-image:url('assets/img/power.jpg')"></i><div><b>${L('Поломка питания', 'Power failure')}</b><span>${L('энергия', 'energy')}</span></div></li>
             <li><i class="thumb" style="background-image:url('assets/img/lander-bg.jpg')"></i><div><b>${L('Мягкая посадка', 'Soft landing')}</b><span>${L('гравитация', 'gravity')}</span></div></li>
-            <li><i class="thumb" style="background-image:url('assets/img/base-mars.jpg')"></i><div><b>${L('База на Луне или Марсе', 'Moon or Mars base')}</b><span>${L('симулятор', 'simulator')}</span></div></li>
-            <li class="final"><i class="thumb" style="background-image:url('assets/img/mars.jpg')"></i><div><b>${L('Финал: Последний шанс на Марсе', 'Final: Last Chance on Mars')}</b><span>${L('приключение от первого лица', 'first-person adventure')}</span></div></li>
+            <li class="final"><i class="thumb" style="background-image:url('assets/img/mars.jpg')"></i><div><b>${L('Финал: Последний шанс на Марсе', 'Final: Last Chance on Mars')}</b><span>${L('10 солов на станции в 3D', '10 sols at a 3D station')}</span></div></li>
           </ul>
           <form class="name-form">
             <label for="cadet">${L('Как тебя зовут, кадет?', 'What’s your name, cadet?')}</label>
