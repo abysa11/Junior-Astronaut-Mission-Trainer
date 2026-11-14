@@ -121,8 +121,8 @@
     { min: 0, ru: 'Кадет', en: 'Cadet' },
     { min: 3, ru: 'Стажёр', en: 'Trainee' },
     { min: 6, ru: 'Бортинженер', en: 'Flight Engineer' },
-    { min: 9, ru: 'Пилот', en: 'Pilot' },
-    { min: 12, ru: 'Командир миссии', en: 'Mission Commander' }
+    { min: 10, ru: 'Пилот', en: 'Pilot' },
+    { min: 15, ru: 'Командир миссии', en: 'Mission Commander' }
   ];
   function totalStars() { return missions.reduce((s, m) => s + (save.best[m.id] || 0), 0); }
   function rank() { const t = totalStars(); const r = RANKS.filter(x => t >= x.min).pop(); return L(r.ru, r.en); }
@@ -164,13 +164,14 @@
           <img class="start-logo" src="assets/sprites/logo.png" alt="${L('Эмблема учебного центра', 'Training centre emblem')}">
           <p class="eyebrow">${L('Junior Astronaut Mission Trainer', 'Space Training Centre')}</p>
           <h1>${L('Тренажёр юного&nbsp;астронавта', 'Junior Astronaut Mission&nbsp;Trainer')}</h1>
-          <p class="lead">${L('Перед настоящим полётом каждый астронавт проходит тренировки. Пройди четыре испытания на борту учебного корабля «Звёздный вихрь» и получи сертификат!',
-                             'Before a real flight, every astronaut trains. Complete four challenges aboard the training ship “Star Whirl” and earn your certificate!')}</p>
+          <p class="lead">${L('Перед настоящим полётом каждый астронавт проходит тренировки. Пройди испытания на борту учебного корабля «Звёздный вихрь», выживи на Марсе и получи сертификат!',
+                             'Before a real flight, every astronaut trains. Complete the challenges aboard the training ship “Star Whirl”, survive on Mars and earn your certificate!')}</p>
           <ul class="start-list">
             <li><i class="thumb" style="background-image:url('assets/img/asteroids.jpg')"></i><div><b>${L('Астероиды', 'Asteroids')}</b><span>${L('пилотирование', 'piloting')}</span></div></li>
             <li><i class="thumb" style="background-image:url('assets/img/oxygen.jpg')"></i><div><b>${L('Утечка кислорода', 'Oxygen leak')}</b><span>${L('ремонт', 'repair')}</span></div></li>
             <li><i class="thumb" style="background-image:url('assets/img/storm.jpg')"></i><div><b>${L('Солнечная буря', 'Solar storm')}</b><span>${L('защита', 'protection')}</span></div></li>
             <li><i class="thumb" style="background-image:url('assets/img/power.jpg')"></i><div><b>${L('Поломка питания', 'Power failure')}</b><span>${L('энергия', 'energy')}</span></div></li>
+            <li class="final"><i class="thumb" style="background-image:url('assets/img/mars.jpg')"></i><div><b>${L('Финал: Последний шанс на Марсе', 'Final: Last Chance on Mars')}</b><span>${L('приключение от первого лица', 'first-person adventure')}</span></div></li>
           </ul>
           <form class="name-form">
             <label for="cadet">${L('Как тебя зовут, кадет?', 'What’s your name, cadet?')}</label>
@@ -245,7 +246,7 @@
       const c = h(`
         <article class="mcard panel ${best ? 'done' : ''}" style="--d:${i * 70}ms">
           <div class="mcard-img" data-done="${L('✓ пройдено', '✓ complete')}" style="background-image:url('assets/img/${m.img}.jpg')">
-            <span class="mnum">${L('Испытание', 'Challenge')} ${i + 1}</span>
+            <span class="mnum">${m.final ? L('Финальное испытание', 'Final challenge') : `${L('Испытание', 'Challenge')} ${i + 1}`}</span>
             <span class="mtag">${esc(m.tag)}</span>
           </div>
           <div class="mcard-body">
@@ -310,11 +311,13 @@
         ctx._steps = names;
         stepsEl.innerHTML = names.map((n, i) => `<li data-i="${i}"><span>${i + 1}</span><em>${esc(n)}</em></li>`).join('');
       },
-      step(i) {
+      // keep = true: только подсветить шаг, не очищая сцену (нужно для мира от первого лица)
+      step(i, keep) {
         stepsEl.querySelectorAll('li').forEach((li, j) => {
           li.classList.toggle('now', j === i);
           li.classList.toggle('past', j < i);
         });
+        if (keep) return;
         ctx.stage.innerHTML = '';
         ctx.stage.classList.remove('wide');
         window.scrollTo({ top: 0, behavior: 'smooth' });
