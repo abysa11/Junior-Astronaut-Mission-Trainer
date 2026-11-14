@@ -2,6 +2,9 @@
    Тренажёр юного астронавта — ядро игры
    Экран старта, мостик (выбор миссии), рамка миссии, итоги, сертификат.
    Каждая миссия лежит в js/missions/*.js и регистрируется через Game.register().
+
+   Языки: русский и английский. Любой текст пишется как L('по-русски', 'in English'),
+   L() возвращает вариант для текущего языка (работает и для массивов).
    ===================================================================== */
 (function () {
   'use strict';
@@ -22,6 +25,33 @@
   }
   const save = load();
   save.best = save.best || {};
+
+  /* ---------- язык ---------- */
+  if (save.lang !== 'ru' && save.lang !== 'en') {
+    const nav = (navigator.language || 'ru').toLowerCase();
+    save.lang = /^(ru|uk|be|kk)/.test(nav) ? 'ru' : 'en';
+  }
+  const L = (ru, en) => (save.lang === 'en' ? en : ru);
+  window.L = L;
+  function applyLang() {
+    document.documentElement.lang = save.lang;
+    document.title = L('Тренажёр юного астронавта · Junior Astronaut Mission Trainer', 'Junior Astronaut Mission Trainer');
+  }
+  function setLang(lang, rerender) {
+    if (lang === save.lang) return;
+    save.lang = lang; persist(); applyLang();
+    sfx.click();
+    rerender();
+  }
+  function langSwitch() {
+    return `<div class="lang-switch" role="group" aria-label="Language / Язык">
+      <button type="button" data-lang="ru" class="${save.lang === 'ru' ? 'on' : ''}">RU</button>
+      <button type="button" data-lang="en" class="${save.lang === 'en' ? 'on' : ''}">EN</button>
+    </div>`;
+  }
+  function bindLang(el, rerender) {
+    el.querySelectorAll('[data-lang]').forEach(b => b.addEventListener('click', () => setLang(b.dataset.lang, rerender)));
+  }
 
   /* ---------- маленькие помощники ---------- */
   function h(html) {
@@ -47,6 +77,14 @@
     return `<img class="ico ${cls}" src="assets/sprites/${src}" alt="" onerror="this.remove()">`;
   }
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  // Русское число с правильным окончанием: plural(3, 'звезда', 'звезды', 'звёзд')
+  function plural(n, one, few, many) {
+    const a = Math.abs(n) % 100, b = a % 10;
+    if (a > 10 && a < 20) return many;
+    if (b === 1) return one;
+    if (b >= 2 && b <= 4) return few;
+    return many;
+  }
 
   function setBg(name) {
     document.querySelector('.bg').style.backgroundImage = `url("assets/img/${name}.jpg")`;
@@ -80,19 +118,23 @@
 
   /* ---------- ранги ---------- */
   const RANKS = [
-    { min: 0, name: 'Кадет' },
-    { min: 3, name: 'Стажёр' },
-    { min: 6, name: 'Бортинженер' },
-    { min: 9, name: 'Пилот' },
-    { min: 12, name: 'Командир миссии' }
+    { min: 0, ru: 'Кадет', en: 'Cadet' },
+    { min: 3, ru: 'Стажёр', en: 'Trainee' },
+    { min: 6, ru: 'Бортинженер', en: 'Flight Engineer' },
+    { min: 9, ru: 'Пилот', en: 'Pilot' },
+    { min: 12, ru: 'Командир миссии', en: 'Mission Commander' }
   ];
   function totalStars() { return missions.reduce((s, m) => s + (save.best[m.id] || 0), 0); }
-  function rank() { const t = totalStars(); return RANKS.filter(r => t >= r.min).pop(); }
+  function rank() { const t = totalStars(); const r = RANKS.filter(x => t >= x.min).pop(); return L(r.ru, r.en); }
   function starsHtml(n, max = 3, cls = '') {
     let s = '';
     for (let i = 0; i < max; i++) s += `<span class="star ${i < n ? 'on' : ''} ${cls}"></span>`;
-    return `<span class="stars" aria-label="${n} из ${max} звёзд">${s}</span>`;
+    return `<span class="stars" aria-label="${L(`${n} из ${max}`, `${n} of ${max}`)}">${s}</span>`;
   }
+
+  /* ---------- устройство с сенсорным экраном? ---------- */
+  const isTouch = (window.matchMedia && matchMedia('(pointer: coarse)').matches) || 'ontouchstart' in window;
+  document.documentElement.classList.toggle('touch', isTouch);
 
   /* ---------- активная миссия: таймеры, чтобы всё чистилось при выходе ---------- */
   let live = null;
@@ -113,31 +155,36 @@
     stopLive();
     setBg('bridge');
     app.innerHTML = '';
+    const typed = document.getElementById('cadet');
+    const nameVal = typed ? typed.value : (save.name || '');
     const el = h(`
       <section class="start fade-in">
         <div class="panel start-card">
-          <img class="start-logo" src="assets/sprites/logo.png" alt="Эмблема учебного центра">
-          <p class="eyebrow">Junior Astronaut Mission Trainer</p>
-          <h1>Тренажёр юного&nbsp;астронавта</h1>
-          <p class="lead">Перед настоящим полётом каждый астронавт проходит тренировки. Пройди четыре испытания на борту учебного корабля «Звёздный вихрь» и получи сертификат!</p>
+          ${langSwitch()}
+          <img class="start-logo" src="assets/sprites/logo.png" alt="${L('Эмблема учебного центра', 'Training centre emblem')}">
+          <p class="eyebrow">${L('Junior Astronaut Mission Trainer', 'Space Training Centre')}</p>
+          <h1>${L('Тренажёр юного&nbsp;астронавта', 'Junior Astronaut Mission&nbsp;Trainer')}</h1>
+          <p class="lead">${L('Перед настоящим полётом каждый астронавт проходит тренировки. Пройди четыре испытания на борту учебного корабля «Звёздный вихрь» и получи сертификат!',
+                             'Before a real flight, every astronaut trains. Complete four challenges aboard the training ship “Star Whirl” and earn your certificate!')}</p>
           <ul class="start-list">
-            <li><i class="thumb" style="background-image:url('assets/img/asteroids.jpg')"></i><div><b>Астероиды</b><span>пилотирование</span></div></li>
-            <li><i class="thumb" style="background-image:url('assets/img/oxygen.jpg')"></i><div><b>Утечка кислорода</b><span>ремонт</span></div></li>
-            <li><i class="thumb" style="background-image:url('assets/img/storm.jpg')"></i><div><b>Солнечная буря</b><span>защита</span></div></li>
-            <li><i class="thumb" style="background-image:url('assets/img/power.jpg')"></i><div><b>Поломка питания</b><span>энергия</span></div></li>
+            <li><i class="thumb" style="background-image:url('assets/img/asteroids.jpg')"></i><div><b>${L('Астероиды', 'Asteroids')}</b><span>${L('пилотирование', 'piloting')}</span></div></li>
+            <li><i class="thumb" style="background-image:url('assets/img/oxygen.jpg')"></i><div><b>${L('Утечка кислорода', 'Oxygen leak')}</b><span>${L('ремонт', 'repair')}</span></div></li>
+            <li><i class="thumb" style="background-image:url('assets/img/storm.jpg')"></i><div><b>${L('Солнечная буря', 'Solar storm')}</b><span>${L('защита', 'protection')}</span></div></li>
+            <li><i class="thumb" style="background-image:url('assets/img/power.jpg')"></i><div><b>${L('Поломка питания', 'Power failure')}</b><span>${L('энергия', 'energy')}</span></div></li>
           </ul>
           <form class="name-form">
-            <label for="cadet">Как тебя зовут, кадет?</label>
+            <label for="cadet">${L('Как тебя зовут, кадет?', 'What’s your name, cadet?')}</label>
             <div class="row">
-              <input id="cadet" maxlength="24" autocomplete="off" placeholder="Твоё имя" value="${esc(save.name || '')}" required>
-              <button class="btn big orange" type="submit">На борт!</button>
+              <input id="cadet" maxlength="24" autocomplete="off" placeholder="${L('Твоё имя', 'Your name')}" value="${esc(nameVal)}" required>
+              <button class="btn big orange" type="submit">${L('На борт!', 'All aboard!')}</button>
             </div>
           </form>
         </div>
       </section>`);
     app.appendChild(el);
+    bindLang(el, screenStart);
     const input = el.querySelector('#cadet');
-    if (!save.name) input.focus();
+    if (!save.name && !isTouch) input.focus();
     el.querySelector('form').addEventListener('submit', e => {
       e.preventDefault();
       const name = input.value.trim();
@@ -153,7 +200,7 @@
     setBg('bridge');
     const total = totalStars();
     const done = missions.filter(m => save.best[m.id]).length;
-    const r = rank();
+    const max = missions.length * 3;
     app.innerHTML = '';
     const el = h(`
       <section class="hub fade-in">
@@ -161,31 +208,35 @@
           <div class="who">
             ${ico('cadet', 'avatar')}
             <div>
-              <div class="eyebrow">${esc(r.name)}</div>
-              <div class="cadet-name">${esc(save.name || 'Кадет')}</div>
+              <div class="eyebrow">${esc(rank())}</div>
+              <div class="cadet-name">${esc(save.name || L('Кадет', 'Cadet'))}</div>
             </div>
           </div>
           <div class="progress-wrap">
-            <div class="progress-label">Подготовка: <b>${done} из ${missions.length}</b> испытаний · <b>${total}</b>  из ${missions.length * 3}</div>
-            <div class="bar"><i style="width:${(total / (missions.length * 3)) * 100}%"></i></div>
+            <div class="progress-label">${L(
+              `Подготовка: <b>${done} из ${missions.length}</b> испытаний · <b>${total} из ${max}</b> звёзд`,
+              `Training: <b>${done} of ${missions.length}</b> challenges · <b>${total} of ${max}</b> stars`)}</div>
+            <div class="bar"><i style="width:${(total / max) * 100}%"></i></div>
           </div>
           <div class="top-actions">
-            <button class="btn ghost small" data-act="mute">${save.mute ? 'Звук: выкл' : 'Звук: вкл'}</button>
-            <button class="btn ghost small" data-act="name">Сменить имя</button>
+            ${langSwitch()}
+            <button class="btn ghost small" data-act="mute">${soundLabel()}</button>
+            <button class="btn ghost small" data-act="name">${L('Сменить имя', 'Change name')}</button>
           </div>
         </header>
 
         <div class="hub-title">
-          <h2>Мостик корабля «Звёздный вихрь»</h2>
-          <p>Выбери тренировку. Их можно проходить в любом порядке и повторять, чтобы собрать все звёзды.</p>
+          <h2>${L('Мостик корабля «Звёздный вихрь»', 'Bridge of the “Star Whirl”')}</h2>
+          <p>${L('Выбери тренировку. Их можно проходить в любом порядке и повторять, чтобы собрать все звёзды.',
+                 'Pick a training. You can play them in any order and replay them to collect all the stars.')}</p>
         </div>
 
         <div class="cards"></div>
 
         <div class="cert-cta panel ${done === missions.length ? 'ready' : ''}">
           ${done === missions.length
-            ? `<div>${ico('logo')}<span><b>Все испытания пройдены!</b> Ты готов к настоящей миссии.</span></div><button class="btn orange" data-act="cert">Получить сертификат</button>`
-            : `<div>${ico('logo')}<span>Пройди все ${missions.length} испытания, чтобы получить <b>сертификат астронавта</b>.</span></div>`}
+            ? `<div>${ico('logo')}<span>${L('<b>Все испытания пройдены!</b> Ты готов к настоящей миссии.', '<b>All challenges complete!</b> You are ready for a real mission.')}</span></div><button class="btn orange" data-act="cert">${L('Получить сертификат', 'Get your certificate')}</button>`
+            : `<div>${ico('logo')}<span>${L(`Пройди все ${missions.length} испытания, чтобы получить <b>сертификат астронавта</b>.`, `Complete all ${missions.length} challenges to earn your <b>astronaut certificate</b>.`)}</span></div>`}
         </div>
       </section>`);
     const cards = el.querySelector('.cards');
@@ -193,8 +244,8 @@
       const best = save.best[m.id] || 0;
       const c = h(`
         <article class="mcard panel ${best ? 'done' : ''}" style="--d:${i * 70}ms">
-          <div class="mcard-img" style="background-image:url('assets/img/${m.img}.jpg')">
-            <span class="mnum">Испытание ${i + 1}</span>
+          <div class="mcard-img" data-done="${L('✓ пройдено', '✓ complete')}" style="background-image:url('assets/img/${m.img}.jpg')">
+            <span class="mnum">${L('Испытание', 'Challenge')} ${i + 1}</span>
             <span class="mtag">${esc(m.tag)}</span>
           </div>
           <div class="mcard-body">
@@ -203,7 +254,7 @@
             <div class="chips">${m.skills.map(s => `<span class="chip">${esc(s)}</span>`).join('')}</div>
             <div class="mcard-foot">
               ${starsHtml(best)}
-              <button class="btn ${best ? '' : 'orange'}">${best ? 'Повторить' : 'Начать'}</button>
+              <button class="btn ${best ? '' : 'orange'}">${best ? L('Повторить', 'Replay') : L('Начать', 'Start')}</button>
             </div>
           </div>
         </article>`);
@@ -211,16 +262,18 @@
       c.querySelector('.mcard-img').addEventListener('click', () => { sfx.click(); runMission(m); });
       cards.appendChild(c);
     });
+    bindLang(el, screenHub);
     el.addEventListener('click', e => {
       const act = e.target.closest('[data-act]');
       if (!act) return;
       const a = act.dataset.act;
-      if (a === 'mute') { save.mute = !save.mute; persist(); act.textContent = save.mute ? 'Звук: выкл' : 'Звук: вкл'; sfx.click(); }
+      if (a === 'mute') { save.mute = !save.mute; persist(); act.textContent = soundLabel(); sfx.click(); }
       if (a === 'name') screenStart();
       if (a === 'cert') screenCertificate();
     });
     app.appendChild(el);
   }
+  function soundLabel() { return save.mute ? L('Звук: выкл', 'Sound: off') : L('Звук: вкл', 'Sound: on'); }
 
   /* ---------- рамка миссии ---------- */
   function runMission(m) {
@@ -230,7 +283,7 @@
     const el = h(`
       <section class="mission fade-in">
         <header class="mbar panel">
-          <button class="btn ghost small" data-act="back">← На мостик</button>
+          <button class="btn ghost small" data-act="back">${L('← На мостик', '← To the bridge')}</button>
           <div class="mtitle">${esc(m.title)}</div>
           <ol class="steps"></ol>
           <div class="mstat"></div>
@@ -248,7 +301,7 @@
     ctx.stat = el.querySelector('.mstat');
     ctx.root = el;
     Object.assign(ctx, {
-      h, esc, shuffle, pick, clamp, sfx, starsHtml, ico,
+      h, esc, shuffle, pick, clamp, sfx, starsHtml, ico, plural, L,
       after(ms, fn) { const id = setTimeout(() => { if (!ctx.dead) fn(); }, ms); ctx.timers.push(id); return id; },
       every(ms, fn) { const id = setInterval(() => { if (!ctx.dead) fn(); }, ms); ctx.timers.push(id); return id; },
       frame(fn) { const id = requestAnimationFrame(t => { if (!ctx.dead) fn(t); }); ctx.rafs.push(id); return id; },
@@ -271,8 +324,8 @@
         mcSlot.innerHTML = '';
         if (!text) return;
         const b = h(`<div class="mc screen ${mood}" role="status">
-            <div class="mc-ava"><img src="assets/sprites/mc.png" alt="ЦУП"></div>
-            <div class="mc-text"><b>Центр управления:</b> <span></span></div>
+            <div class="mc-ava"><img src="assets/sprites/mc.png" alt="${L('ЦУП', 'Mission Control')}"></div>
+            <div class="mc-text"><b>${L('Центр управления:', 'Mission Control:')}</b> <span></span></div>
           </div>`);
         b.querySelector('.mc-text span').innerHTML = text;
         mcSlot.appendChild(b);
@@ -300,22 +353,25 @@
     app.innerHTML = '';
     const idx = missions.indexOf(m);
     const next = missions.find((x, i) => i > idx && !save.best[x.id]) || missions.find(x => !save.best[x.id]);
+    const verdicts = L(
+      ['', 'Задание выполнено, но есть что улучшить.', 'Хорошая работа, кадет!', 'Безупречно! Настоящий астронавт!'],
+      ['', 'Mission complete, but there’s room to improve.', 'Good job, cadet!', 'Flawless! A real astronaut!']);
     const el = h(`
       <section class="result fade-in">
         <div class="panel result-card">
-          <p class="eyebrow">Испытание пройдено</p>
+          <p class="eyebrow">${L('Испытание пройдено', 'Challenge complete')}</p>
           <h2>${esc(m.title)}</h2>
           <div class="big-stars">${starsHtml(stars, 3, 'pop')}</div>
-          <p class="verdict">${['', 'Задание выполнено, но есть что улучшить.', 'Хорошая работа, кадет!', 'Безупречно! Настоящий астронавт!'][stars]}${improved ? ' <b>Новый рекорд!</b>' : ''}</p>
+          <p class="verdict">${verdicts[stars]}${improved ? ` <b>${L('Новый рекорд!', 'New record!')}</b>` : ''}</p>
           ${notes.length ? `<ul class="notes">${notes.map(n => `<li class="${n.ok ? 'ok' : 'warn'}">${n.text}</li>`).join('')}</ul>` : ''}
           <div class="learn screen">
-            <h3>Что ты узнал</h3>
+            <h3>${L('Что ты узнал', 'What you learned')}</h3>
             <ul>${m.learn.map(t => `<li>${t}</li>`).join('')}</ul>
           </div>
           <div class="row center">
-            <button class="btn ghost" data-act="again">Ещё раз</button>
-            <button class="btn" data-act="hub">На мостик</button>
-            ${next ? `<button class="btn orange" data-act="next">Дальше: ${esc(next.title)}</button>` : ''}
+            <button class="btn ghost" data-act="again">${L('Ещё раз', 'Play again')}</button>
+            <button class="btn" data-act="hub">${L('На мостик', 'To the bridge')}</button>
+            ${next ? `<button class="btn orange" data-act="next">${L('Дальше', 'Next')}: ${esc(next.title)}</button>` : ''}
           </div>
         </div>
       </section>`);
@@ -334,14 +390,15 @@
       <section class="result fade-in">
         <div class="panel result-card fail">
           ${ico('mc', 'fail-ico')}
-          <p class="eyebrow">Тренировка остановлена</p>
+          <p class="eyebrow">${L('Тренировка остановлена', 'Training stopped')}</p>
           <h2>${esc(m.title)}</h2>
           <p class="verdict">${reason}</p>
-          ${tip ? `<p class="tip"><b>Совет инструктора:</b> ${tip}</p>` : ''}
-          <p class="small muted">Это тренажёр — здесь ошибаться не страшно. Именно для этого астронавты и тренируются!</p>
+          ${tip ? `<p class="tip"><b>${L('Совет инструктора:', 'Instructor’s tip:')}</b> ${tip}</p>` : ''}
+          <p class="small muted">${L('Это тренажёр — здесь ошибаться не страшно. Именно для этого астронавты и тренируются!',
+                                    'This is a simulator — mistakes are okay here. That’s exactly why astronauts train!')}</p>
           <div class="row center">
-            <button class="btn ghost" data-act="hub">На мостик</button>
-            <button class="btn orange" data-act="again">Попробовать снова</button>
+            <button class="btn ghost" data-act="hub">${L('На мостик', 'To the bridge')}</button>
+            <button class="btn orange" data-act="again">${L('Попробовать снова', 'Try again')}</button>
           </div>
         </div>
       </section>`);
@@ -354,30 +411,36 @@
     stopLive();
     setBg('bridge');
     const total = totalStars();
-    const date = new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+    const date = new Date().toLocaleDateString(L('ru-RU', 'en-GB'), { day: 'numeric', month: 'long', year: 'numeric' });
     app.innerHTML = '';
     const el = h(`
       <section class="result fade-in">
         <div class="certificate panel">
           <div class="cert-inner">
             ${ico('logo')}
-            <p class="eyebrow">Учебный центр «Звёздный вихрь»</p>
-            <h2>Сертификат юного астронавта</h2>
-            <p>Настоящим подтверждается, что</p>
-            <div class="cert-name">${esc(save.name || 'Кадет')}</div>
-            <p>успешно прошёл(ла) подготовку к космической миссии и получает звание</p>
-            <div class="cert-rank">${esc(rank().name)}</div>
+            <p class="eyebrow">${L('Учебный центр «Звёздный вихрь»', '“Star Whirl” Training Centre')}</p>
+            <h2>${L('Сертификат юного астронавта', 'Junior Astronaut Certificate')}</h2>
+            <p>${L('Настоящим подтверждается, что', 'This certifies that')}</p>
+            <div class="cert-name">${esc(save.name || L('Кадет', 'Cadet'))}</div>
+            <p>${L('успешно прошёл(ла) подготовку к космической миссии и получает звание', 'has successfully completed space mission training and is awarded the rank of')}</p>
+            <div class="cert-rank">${esc(rank())}</div>
             <ul class="cert-list">
               ${missions.map(m => `<li>${esc(m.title)} ${starsHtml(save.best[m.id] || 0)}</li>`).join('')}
             </ul>
-            <div class="cert-foot"><span>Всего: <b>${total} </b></span><span>${date}</span><span>Руководитель полётов: ЦУП</span></div>
+            <div class="cert-foot">
+              <span>${L('Всего', 'Total')}: <b>${total} ${L(plural(total, 'звезда', 'звезды', 'звёзд'), total === 1 ? 'star' : 'stars')}</b></span>
+              <span>${date}</span>
+              <span>${L('Руководитель полётов: ЦУП', 'Flight Director: Mission Control')}</span>
+            </div>
           </div>
         </div>
         <div class="row center no-print">
-          <button class="btn ghost" data-act="hub">На мостик</button>
-          <button class="btn orange" data-act="print">Распечатать</button>
+          ${langSwitch()}
+          <button class="btn ghost" data-act="hub">${L('На мостик', 'To the bridge')}</button>
+          <button class="btn orange" data-act="print">${L('Распечатать', 'Print')}</button>
         </div>
       </section>`);
+    bindLang(el, screenCertificate);
     el.querySelector('[data-act=hub]').onclick = screenHub;
     el.querySelector('[data-act=print]').onclick = () => window.print();
     app.appendChild(el);
@@ -405,9 +468,12 @@
   /* =====================================================================
      ПУБЛИЧНЫЙ API
      ===================================================================== */
+  applyLang();
   window.Game = {
     register(m) { missions.push(m); missions.sort((a, b) => a.order - b.order); },
     boot() { save.name ? screenHub() : screenStart(); },
-    hub: screenHub
+    hub: screenHub,
+    isTouch,
+    get lang() { return save.lang; }
   };
 })();

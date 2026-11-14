@@ -168,7 +168,7 @@ b { font-weight: 800; }
 .who .eyebrow { margin: 0; }
 .progress-wrap { flex: 1 1 260px; }
 .progress-label { font-size: 0.92rem; margin-bottom: 6px; }
-.top-actions { display: flex; gap: 8px; }
+.top-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .hub-title { color: #fff; text-shadow: 0 2px 14px rgba(20, 10, 80, 0.8); margin: 26px 4px 16px; }
 .hub-title h2 { font-size: clamp(1.5rem, 3.4vw, 2.2rem); }
 .hub-title p { font-weight: 700; margin: 0; }
@@ -183,7 +183,7 @@ b { font-weight: 800; }
 .mnum, .mtag { position: absolute; top: 10px; font-family: var(--head); font-size: 0.7rem; letter-spacing: 0.05em; padding: 5px 10px; border-radius: 4px; }
 .mnum { left: 12px; background: rgba(23, 32, 110, 0.85); color: var(--cyan); border: 1px solid var(--cyan); }
 .mtag { right: 12px; background: linear-gradient(180deg, #fff1b8, var(--glow)); color: #5a2600; }
-.mcard.done .mcard-img::after { content: '✓ пройдено'; position: absolute; bottom: 10px; left: 12px; font-family: var(--head); font-size: 0.72rem; background: var(--good); color: #fff; padding: 4px 10px; border-radius: 4px; }
+.mcard.done .mcard-img::after { content: attr(data-done); position: absolute; bottom: 10px; left: 12px; font-family: var(--head); font-size: 0.72rem; background: var(--good); color: #fff; padding: 4px 10px; border-radius: 4px; }
 .mcard-body { padding: 14px 10px 16px; display: flex; flex-direction: column; flex: 1; }
 .mcard-body h3 { font-size: 1.15rem; }
 .mcard-body p { font-size: 0.93rem; color: var(--ink-soft); flex: 1; }
@@ -435,4 +435,50 @@ input[type=range] { width: 100%; accent-color: var(--orange); height: 30px; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition: none !important; }
+}
+
+/* ---------- Джойстик для телефона (как в мобильных играх) ---------- */
+.pad { display: flex; align-items: stretch; gap: 14px; margin-top: 12px; padding: 12px; }
+.joy {
+  position: relative; flex: 1 1 auto; min-height: 190px; border-radius: 14px;
+  touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+  background: radial-gradient(circle at 50% 50%, rgba(95, 216, 255, 0.12), transparent 70%);
+}
+.joy-base {
+  position: absolute; left: 50%; top: 50%; width: 150px; height: 150px; transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(23, 32, 110, 0.55) 0 55%, rgba(23, 32, 110, 0.8) 56% 100%);
+  border: 4px solid var(--cyan);
+  box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.85), 0 0 24px rgba(95, 216, 255, 0.6), inset 0 0 22px rgba(95, 216, 255, 0.4);
+  transition: left 0.15s, top 0.15s;
+}
+.joy.active .joy-base { transition: none; }
+.joy-knob {
+  position: absolute; left: 50%; top: 50%; width: 66px; height: 66px; transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 32%, #fff 0, #fff1b8 25%, var(--glow) 60%, var(--orange-2));
+  box-shadow: 0 6px 14px rgba(30, 20, 100, 0.45), inset 0 -4px 0 rgba(160, 60, 0, 0.35);
+}
+.joy.active .joy-knob { box-shadow: 0 0 22px rgba(255, 181, 71, 0.9), inset 0 -4px 0 rgba(160, 60, 0, 0.35); }
+.throttle.vertical { flex-direction: column; justify-content: center; align-items: stretch; gap: 8px; flex: 0 0 auto; min-width: 120px; }
+.throttle.vertical > span { text-align: center; font-size: 0.8rem; }
+.throttle.vertical .btn { padding: 12px 14px; }
+
+/* ---------- Переключатель языка ---------- */
+.lang-switch { display: inline-flex; gap: 2px; padding: 3px; border-radius: 10px; background: rgba(43, 42, 107, 0.12); border: 1px solid var(--metal-3); }
+.lang-switch button { font-family: var(--head); font-size: 0.8rem; border: 0; padding: 7px 11px; border-radius: 8px; cursor: pointer; background: transparent; color: var(--ink-soft); }
+.lang-switch button.on { background: linear-gradient(180deg, var(--screen-1), var(--screen-2)); color: #fff; box-shadow: 0 0 10px rgba(95, 216, 255, 0.6); }
+.start-card .lang-switch { position: absolute; top: 16px; right: 18px; }
+@media (max-width: 560px) {
+  .start-card .lang-switch { position: static; margin-bottom: 8px; }
+  .start-logo { margin-top: -60px; width: 120px; height: 120px; }
+  .start-list { grid-template-columns: 1fr; }
+}
+
+/* на телефоне верхняя панель миссии не липнет к экрану, чтобы не закрывать игровое поле */
+@media (max-width: 760px) {
+  .mbar { position: static; }
+  .mc { padding: 8px 12px 8px 8px; }
+  .mc-ava { width: 48px; height: 48px; }
+  .mc-text { font-size: 0.95rem; }
 }

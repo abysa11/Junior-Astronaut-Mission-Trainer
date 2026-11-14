@@ -1,50 +1,70 @@
 /* =====================================================================
-   Испытание 1. Астероидный пояс
+   Испытание 1. Астероидный пояс / Mission 1. Asteroid Belt
    Шаги: брифинг → выбор маршрута → пилотирование (canvas).
+   Все тексты на двух языках: L('по-русски', 'in English').
+   На телефоне корабль управляется джойстиком-кружком.
    ===================================================================== */
 Game.register({
-  id: 'asteroids', order: 1, img: 'asteroids', tag: 'Пилотирование',
-  title: 'Астероидный пояс',
-  situation: 'Корабль влетел в область, где много астероидов. Один из них летит прямо на нас!',
-  skills: ['Ориентация', 'Скорость', 'Траектория'],
-  learn: [
-    '<b>Траектория</b> — это линия, по которой движется тело. Зная направление и скорость астероида, можно предсказать, где он окажется через секунду.',
-    'Уклоняться нужно от того места, где астероид <b>будет</b>, а не от того, где он сейчас.',
-    'Чем быстрее летит корабль, тем меньше времени на реакцию. В опасных местах пилоты <b>сбавляют скорость</b>.',
-    'Самый короткий путь не всегда самый безопасный. Маршрут выбирают по риску и по запасу топлива.',
-    'В настоящем поясе астероидов между Марсом и Юпитером между крупными астероидами в среднем сотни тысяч километров, так что зонды пролетают его спокойно.'
-  ],
+  id: 'asteroids', order: 1, img: 'asteroids',
+  get tag() { return L('Пилотирование', 'Piloting'); },
+  get title() { return L('Астероидный пояс', 'Asteroid Belt'); },
+  get situation() { return L('Корабль влетел в область, где много астероидов. Один из них летит прямо на нас!', 'The ship has entered a zone full of asteroids. One of them is heading straight for us!'); },
+  get skills() { return L(['Ориентация', 'Скорость', 'Траектория'], ['Orientation', 'Speed', 'Trajectory']); },
+  get learn() {
+    return L([
+      '<b>Траектория</b> — это линия, по которой движется тело. Зная направление и скорость астероида, можно предсказать, где он окажется через секунду.',
+      'Уклоняться нужно от того места, где астероид <b>будет</b>, а не от того, где он сейчас.',
+      'Чем быстрее летит корабль, тем меньше времени на реакцию. В опасных местах пилоты <b>сбавляют скорость</b>.',
+      'Самый короткий путь не всегда самый безопасный. Маршрут выбирают по риску и по запасу топлива.',
+      'В настоящем поясе астероидов между Марсом и Юпитером между крупными астероидами в среднем сотни тысяч километров, так что зонды пролетают его спокойно.'
+    ], [
+      'A <b>trajectory</b> is the path an object moves along. If you know an asteroid’s direction and speed, you can predict where it will be a second later.',
+      'Dodge the place where the asteroid <b>will be</b>, not where it is right now.',
+      'The faster the ship flies, the less time you have to react. In dangerous places pilots <b>slow down</b>.',
+      'The shortest route is not always the safest. Pilots choose a route by its risk and by how much fuel they have.',
+      'In the real asteroid belt between Mars and Jupiter, big asteroids are on average hundreds of thousands of kilometres apart, so space probes fly through it safely.'
+    ]);
+  },
 
   start(ctx) {
     const { h, sfx, shuffle, clamp } = ctx;
-    ctx.steps(['Брифинг', 'Маршрут', 'Пилотирование']);
+    ctx.steps(L(['Брифинг', 'Маршрут', 'Пилотирование'], ['Briefing', 'Route', 'Piloting']));
     let routeMistakes = 0;
     let density = 1;      // зависит от выбранного маршрута
     let routeOk = false;
+    const touch = Game.isTouch;
 
     briefing();
 
     /* ---------------- 1. Брифинг ---------------- */
     function briefing() {
       ctx.step(0);
-      ctx.mc('Внимание, пилот! Впереди <b>астероидный пояс</b>. Нужно выбрать маршрут и провести корабль к станции «Орбита-7», не задев ни одного камня.');
+      ctx.mc(L('Внимание, пилот! Впереди <b>астероидный пояс</b>. Нужно выбрать маршрут и провести корабль к станции «Орбита-7», не задев ни одного камня.',
+               'Attention, pilot! There is an <b>asteroid belt</b> ahead. Choose a route and fly the ship to the “Orbit-7” station without touching a single rock.'));
+      const controls = touch
+        ? L('<b>Управление:</b> под игровым полем есть <b>джойстик</b>: положи на него палец и веди в нужную сторону. Справа — кнопки скорости.',
+            '<b>Controls:</b> below the game screen there is a <b>joystick</b>: put your thumb on it and slide where you want to fly. Speed buttons are on the right.')
+        : L('<b>Управление:</b> <span class="kbd">↑</span> <span class="kbd">↓</span> <span class="kbd">←</span> <span class="kbd">→</span> или <span class="kbd">W A S D</span>, или веди мышкой по полю. Скорость: кнопки или <span class="kbd">1</span> <span class="kbd">2</span> <span class="kbd">3</span>.',
+            '<b>Controls:</b> <span class="kbd">↑</span> <span class="kbd">↓</span> <span class="kbd">←</span> <span class="kbd">→</span> or <span class="kbd">W A S D</span>, or drag with the mouse. Speed: buttons or <span class="kbd">1</span> <span class="kbd">2</span> <span class="kbd">3</span>.');
       const el = h(`
         <div class="panel card">
-          <div class="task-title"><span class="num">1</span><h2>Как читать траекторию</h2></div>
+          <div class="task-title"><span class="num">1</span><h2>${L('Как читать траекторию', 'How to read a trajectory')}</h2></div>
           <div class="closeup">
             <div class="screen traj-demo">
               <svg viewBox="0 0 220 160" preserveAspectRatio="none"><line x1="165" y1="42" x2="72" y2="112" stroke="#ff8a9a" stroke-width="3" stroke-dasharray="8 6"/></svg>
               ${ctx.ico('rock1', 'rock')}
               ${ctx.ico('ship', 'ship')}
-              <span class="lbl">РАДАР ТРАЕКТОРИЙ</span>
+              <span class="lbl">${L('РАДАР ТРАЕКТОРИЙ', 'TRAJECTORY RADAR')}</span>
             </div>
             <div>
-              <p>У каждого астероида есть <b>направление</b> и <b>скорость</b>. Радар корабля рисует пунктир — путь, по которому камень полетит дальше.</p>
-              <p>Если пунктир упирается в твой корабль, он станет <b style="color:var(--bad)">красным</b>: уходи вверх или вниз, пока не поздно!</p>
-              <div class="fact"><b>Управление:</b> <span class="kbd">↑</span> <span class="kbd">↓</span> <span class="kbd">←</span> <span class="kbd">→</span> или <span class="kbd">W A S D</span>. На телефоне — веди пальцем по экрану. Скорость: кнопки или <span class="kbd">1</span> <span class="kbd">2</span> <span class="kbd">3</span>.</div>
+              <p>${L('У каждого астероида есть <b>направление</b> и <b>скорость</b>. Радар корабля рисует пунктир — путь, по которому камень полетит дальше.',
+                     'Every asteroid has a <b>direction</b> and a <b>speed</b>. The ship’s radar draws a dashed line — the path the rock will follow.')}</p>
+              <p>${L('Если пунктир упирается в твой корабль, он станет <b style="color:var(--bad)">красным</b>: уходи вверх или вниз, пока не поздно!',
+                     'If the line points at your ship, it turns <b style="color:var(--bad)">red</b>: move up or down before it’s too late!')}</p>
+              <div class="fact">${controls}</div>
             </div>
           </div>
-          <div class="actions"><button class="btn orange big">Понятно, к маршруту →</button></div>
+          <div class="actions"><button class="btn orange big">${L('Понятно, к маршруту →', 'Got it, to the route →')}</button></div>
         </div>`);
       el.querySelector('button').onclick = () => { sfx.click(); routes(); };
       ctx.stage.appendChild(el);
@@ -53,16 +73,18 @@ Game.register({
     /* ---------------- 2. Маршрут ---------------- */
     function routes() {
       ctx.step(1);
-      ctx.mc('Сканер построил три маршрута. Топлива на борту: <b>100 единиц</b>. Выбери <b>самый безопасный</b> путь, на который хватит топлива.');
+      ctx.mc(L('Сканер построил три маршрута. Топлива на борту: <b>100 единиц</b>. Выбери <b>самый безопасный</b> путь, на который хватит топлива.',
+               'The scanner found three routes. Fuel on board: <b>100 units</b>. Choose the <b>safest</b> route that we have enough fuel for.'));
       // Профили маршрутов. Безопасный уходит то вверх, то вниз — каждый раз по-разному.
       const sides = shuffle(['top', 'bottom']);
+      const fast = L('быстрые', 'fast'), slow = L('медленные', 'slow');
       const profiles = [
-        { key: 'short', path: 'mid', color: '#ff7e8a', name: 'Прямой', len: 400, rocks: 18, speed: 'быстрые', fuel: 60,
-          verdict: 'Короткий, но через самую гущу быстрых астероидов. Риск столкновения очень высокий.' },
-        { key: 'safe', path: sides[0], color: '#7ee0a0', name: 'Обходной', len: 520, rocks: 5, speed: 'медленные', fuel: 80,
-          verdict: 'Правильно! Путь чуть длиннее, но астероидов мало и они медленные. Топлива хватает.' },
-        { key: 'long', path: sides[1], color: '#ffd166', name: 'Дальний', len: 900, rocks: 1, speed: 'медленные', fuel: 135,
-          verdict: 'Астероидов почти нет, но нужно 135 единиц топлива, а у нас только 100. Не долетим!' }
+        { key: 'short', path: 'mid', color: '#ff7e8a', name: L('Прямой', 'Direct'), len: 400, rocks: 18, speed: fast, fuel: 60,
+          verdict: L('Короткий, но через самую гущу быстрых астероидов. Риск столкновения очень высокий.', 'Short, but right through a crowd of fast asteroids. The risk of a crash is very high.') },
+        { key: 'safe', path: sides[0], color: '#7ee0a0', name: L('Обходной', 'Detour'), len: 520, rocks: 5, speed: slow, fuel: 80,
+          verdict: L('Правильно! Путь чуть длиннее, но астероидов мало и они медленные. Топлива хватает.', 'Correct! The route is a bit longer, but there are few asteroids and they are slow. We have enough fuel.') },
+        { key: 'long', path: sides[1], color: '#ffd166', name: L('Дальний', 'Long way'), len: 900, rocks: 1, speed: slow, fuel: 135,
+          verdict: L('Астероидов почти нет, но нужно 135 единиц топлива, а у нас только 100. Не долетим!', 'Almost no asteroids, but it needs 135 units of fuel and we only have 100. We won’t make it!') }
       ];
       const letters = ['A', 'B', 'C'];
       const order = shuffle(profiles);
@@ -79,12 +101,10 @@ Game.register({
         const n = p.rocks;
         for (let i = 0; i < n; i++) {
           const t = (i + 0.5) / n * 0.8 + 0.1;
-          let x = 70 + 660 * t, y;
+          const x = 70 + 660 * t;
+          let y;
           if (p.path === 'mid') y = 180;
-          else {
-            const dir = p.path === 'top' ? -1 : 1;
-            y = 180 + dir * 140 * Math.sin(Math.PI * t) * 1.0;
-          }
+          else y = 180 + (p.path === 'top' ? -1 : 1) * 140 * Math.sin(Math.PI * t);
           pts.push({ x: x + (Math.random() - 0.5) * 30, y: y + (Math.random() - 0.5) * 50, r: p.key === 'short' ? 5 + Math.random() * 7 : 4 + Math.random() * 6 });
         }
         return pts;
@@ -97,7 +117,7 @@ Game.register({
 
       const el = h(`
         <div class="panel card">
-          <div class="task-title"><span class="num">2</span><h2>Выбери маршрут</h2></div>
+          <div class="task-title"><span class="num">2</span><h2>${L('Выбери маршрут', 'Choose a route')}</h2></div>
           <svg class="route-map screen" viewBox="0 0 800 360">
             ${profiles.map(p => `<path d="${P[p.path]}" data-k="${p.key}" fill="none" stroke="${p.color}" stroke-width="5" stroke-dasharray="12 10" opacity=".85"/>`).join('')}
             ${svgRocks}
@@ -106,25 +126,25 @@ Game.register({
               return `<g><rect x="${lx - 16}" y="${ly - 16}" width="32" height="32" rx="9" fill="${p.color}"/><text x="${lx}" y="${ly + 6}" text-anchor="middle" font-weight="900" font-size="18" fill="#1d2466">${p.letter}</text></g>`;
             }).join('')}
             <image href="assets/sprites/ship.png" x="14" y="152" width="84" height="56"/>
-            <text x="56" y="228" fill="#cfe6ff" font-size="14" font-weight="800" text-anchor="middle">Мы</text>
+            <text x="56" y="228" fill="#cfe6ff" font-size="14" font-weight="800" text-anchor="middle">${L('Мы', 'Us')}</text>
             <image href="assets/sprites/station.png" x="700" y="134" width="92" height="92"/>
-            <text x="746" y="240" fill="#cfe6ff" font-size="14" font-weight="800" text-anchor="middle">Станция</text>
+            <text x="746" y="240" fill="#cfe6ff" font-size="14" font-weight="800" text-anchor="middle">${L('Станция', 'Station')}</text>
           </svg>
           <div class="route-cards">
             ${order.map(p => `
               <button class="opt route-card" data-k="${p.key}">
-                <h4><span class="dot" style="background:${p.color}"></span> Маршрут ${p.letter} · ${p.name}</h4>
+                <h4><span class="dot" style="background:${p.color}"></span> ${L('Маршрут', 'Route')} ${p.letter} · ${p.name}</h4>
                 <div class="stats">
-                  <span>Длина</span><b>${p.len} тыс. км</b>
-                  <span>Астероидов</span><b>${p.rocks}</b>
-                  <span>Их скорость</span><b>${p.speed}</b>
-                  <span>Нужно топлива</span><b style="color:${p.fuel > 100 ? 'var(--bad)' : 'inherit'}">${p.fuel} ед.</b>
+                  <span>${L('Длина', 'Length')}</span><b>${p.len} ${L('тыс. км', 'thousand km')}</b>
+                  <span>${L('Астероидов', 'Asteroids')}</span><b>${p.rocks}</b>
+                  <span>${L('Их скорость', 'Their speed')}</span><b>${p.speed}</b>
+                  <span>${L('Нужно топлива', 'Fuel needed')}</span><b style="color:${p.fuel > 100 ? 'var(--bad)' : 'inherit'}">${p.fuel} ${L('ед.', 'units')}</b>
                 </div>
               </button>`).join('')}
           </div>
-          <div class="fuel-line">Топливо на борту: 100 единиц</div>
+          <div class="fuel-line">${L('Топливо на борту: 100 единиц', 'Fuel on board: 100 units')}</div>
           <div class="fb"></div>
-          <div class="actions"><button class="btn orange big go" disabled>Лететь этим маршрутом</button></div>
+          <div class="actions"><button class="btn orange big go" disabled>${L('Лететь этим маршрутом', 'Fly this route')}</button></div>
         </div>`);
       let chosen = null;
       const go = el.querySelector('.go');
@@ -143,19 +163,22 @@ Game.register({
           routeMistakes++;
           sfx.bad();
           card.classList.add('wrong'); card.disabled = true;
-          fb.innerHTML = `<div class="feedback no">${chosen.verdict} Выбери другой маршрут.</div>`;
-          ctx.mc('Отказ! На этот маршрут не хватит топлива — корабль застрянет в пустоте. Сравни «нужно топлива» с тем, что есть на борту.', 'bad');
+          fb.innerHTML = `<div class="feedback no">${chosen.verdict} ${L('Выбери другой маршрут.', 'Choose another route.')}</div>`;
+          ctx.mc(L('Отказ! На этот маршрут не хватит топлива — корабль застрянет в пустоте. Сравни «нужно топлива» с тем, что есть на борту.',
+                   'Denied! There isn’t enough fuel for this route — the ship would get stuck in empty space. Compare “fuel needed” with the fuel on board.'), 'bad');
           go.disabled = true; chosen = null;
           return;
         }
         if (chosen.key === 'short') {
           routeMistakes++;
           density = 1.55;
-          ctx.mc('Принято, но это рискованно: на прямом пути много быстрых камней. Будь очень внимателен!', 'bad');
+          ctx.mc(L('Принято, но это рискованно: на прямом пути много быстрых камней. Будь очень внимателен!',
+                   'Accepted, but it’s risky: the direct route is full of fast rocks. Be very careful!'), 'bad');
         } else {
           routeOk = true;
           density = 1;
-          ctx.mc('Отличный выбор! Обходной маршрут — самый безопасный. Запускаем двигатели!', 'good');
+          ctx.mc(L('Отличный выбор! Обходной маршрут — самый безопасный. Запускаем двигатели!',
+                   'Great choice! The detour is the safest route. Starting the engines!'), 'good');
         }
         sfx.ok();
         el.querySelectorAll('button').forEach(b => b.disabled = true);
@@ -169,20 +192,28 @@ Game.register({
     function flight() {
       ctx.step(2);
       ctx.stage.classList.add('wide');
-      ctx.mc('Ты за штурвалом! Следи за <b>пунктиром</b> радара. Скорость можно менять: медленнее — безопаснее, но дольше.');
+      ctx.mc(L('Ты за штурвалом! Следи за <b>пунктиром</b> радара. Скорость можно менять: медленнее — безопаснее, но дольше.',
+               'You’re at the controls! Watch the radar’s <b>dashed lines</b>. You can change speed: slower is safer, but takes longer.'));
       const W = 960, H = 540;
+      const speedBtns = `
+              <button class="btn small ghost" data-s="0">1 · ${L('Тихо', 'Slow')}</button>
+              <button class="btn small ghost on" data-s="1">2 · ${L('Средне', 'Medium')}</button>
+              <button class="btn small ghost" data-s="2">3 · ${L('Быстро', 'Fast')}</button>`;
       const el = h(`
-        <div class="flight">
-          <canvas class="screen" width="${W}" height="${H}" aria-label="Игровое поле: уклоняйся от астероидов"></canvas>
-          <div class="overlay-msg"><div>${ctx.ico('ship')}<h2>Готов?</h2><p>Долети до станции, не задев астероиды. У корабля 3 щита.</p><button class="btn orange big">Старт!</button></div></div>
-          <div class="flight-ui panel flat">
-            <div class="throttle">СКОРОСТЬ
-              <button class="btn small ghost" data-s="0">1 · Тихо</button>
-              <button class="btn small ghost on" data-s="1">2 · Средне</button>
-              <button class="btn small ghost" data-s="2">3 · Быстро</button>
+        <div class="flight ${touch ? 'is-touch' : ''}">
+          <canvas class="screen" width="${W}" height="${H}" aria-label="${L('Игровое поле: уклоняйся от астероидов', 'Game screen: dodge the asteroids')}"></canvas>
+          <div class="overlay-msg"><div>${ctx.ico('ship')}<h2>${L('Готов?', 'Ready?')}</h2><p>${L('Долети до станции, не задев астероиды. У корабля 3 щита.', 'Reach the station without hitting the asteroids. The ship has 3 shields.')}</p><button class="btn orange big">${L('Старт!', 'Start!')}</button></div></div>
+          ${touch ? `
+          <div class="pad panel flat">
+            <div class="joy" aria-label="${L('Джойстик', 'Joystick')}">
+              <div class="joy-base"><div class="joy-knob"></div></div>
             </div>
-            <div class="hint-keys"><span class="kbd">↑↓←→</span> / <span class="kbd">WASD</span> или веди пальцем</div>
-          </div>
+            <div class="throttle vertical"><span>${L('СКОРОСТЬ', 'SPEED')}</span>${speedBtns}</div>
+          </div>` : `
+          <div class="flight-ui panel flat">
+            <div class="throttle">${L('СКОРОСТЬ', 'SPEED')} ${speedBtns}</div>
+            <div class="hint-keys"><span class="kbd">↑↓←→</span> / <span class="kbd">WASD</span> ${L('или веди мышкой', 'or drag with the mouse')}</div>
+          </div>`}
         </div>`);
       ctx.stage.appendChild(el);
       const cv = el.querySelector('canvas');
@@ -225,6 +256,7 @@ Game.register({
       const GOAL = 48; // «секунд» полёта при средней скорости
       for (let i = 0; i < 90; i++) stars.push({ x: Math.random() * W, y: Math.random() * H, z: Math.random() * 0.9 + 0.1 });
 
+      /* --- клавиатура --- */
       const keys = {};
       const kd = e => {
         const k = e.key.toLowerCase();
@@ -237,15 +269,61 @@ Game.register({
       window.addEventListener('keyup', ku);
       ctx.onCleanup(() => { window.removeEventListener('keydown', kd); window.removeEventListener('keyup', ku); });
 
+      /* --- мышь: корабль летит к курсору, пока кнопка зажата --- */
       let target = null;
       function toLocal(e) {
         const r = cv.getBoundingClientRect();
         return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H };
       }
-      cv.addEventListener('pointerdown', e => { target = toLocal(e); cv.setPointerCapture(e.pointerId); });
+      cv.addEventListener('pointerdown', e => { target = toLocal(e); try { cv.setPointerCapture(e.pointerId); } catch (err) { /* не критично */ } });
       cv.addEventListener('pointermove', e => { if (target) target = toLocal(e); });
       cv.addEventListener('pointerup', () => { target = null; });
       cv.addEventListener('pointercancel', () => { target = null; });
+
+      /* --- джойстик-кружок для телефона ---
+         Палец можно поставить в любое место зоны: кружок «прыгает» под палец,
+         а смещение ручки от центра задаёт направление и силу движения. */
+      const joy = { x: 0, y: 0, id: null };
+      const zone = el.querySelector('.joy');
+      if (zone) {
+        const base = zone.querySelector('.joy-base'), knob = zone.querySelector('.joy-knob');
+        let cx = 0, cy = 0, R = 50;
+        const home = () => { base.style.left = '50%'; base.style.top = '50%'; };
+        const moveKnob = (dx, dy) => { knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`; };
+        function setFrom(e) {
+          let dx = e.clientX - cx, dy = e.clientY - cy;
+          const len = Math.hypot(dx, dy);
+          if (len > R) { dx = dx / len * R; dy = dy / len * R; }
+          moveKnob(dx, dy);
+          joy.x = dx / R; joy.y = dy / R;
+        }
+        zone.addEventListener('pointerdown', e => {
+          e.preventDefault();
+          if (joy.id !== null) return;
+          joy.id = e.pointerId;
+          try { zone.setPointerCapture(e.pointerId); } catch (err) { /* не критично */ }
+          const zr = zone.getBoundingClientRect(), br = base.getBoundingClientRect();
+          R = br.width * 0.38;
+          // кружок встаёт под палец, но не вылезает за край зоны
+          const half = br.width / 2;
+          cx = clamp(e.clientX, zr.left + half, zr.right - half);
+          cy = clamp(e.clientY, zr.top + half, zr.bottom - half);
+          base.style.left = (cx - zr.left) + 'px';
+          base.style.top = (cy - zr.top) + 'px';
+          zone.classList.add('active');
+          setFrom(e);
+        });
+        zone.addEventListener('pointermove', e => { if (e.pointerId === joy.id) setFrom(e); });
+        const release = e => {
+          if (e.pointerId !== joy.id) return;
+          joy.id = null; joy.x = 0; joy.y = 0;
+          moveKnob(0, 0); home();
+          zone.classList.remove('active');
+        };
+        zone.addEventListener('pointerup', release);
+        zone.addEventListener('pointercancel', release);
+        zone.addEventListener('contextmenu', e => e.preventDefault());
+      }
 
       overlay.querySelector('button').onclick = () => {
         sfx.ok();
@@ -253,10 +331,10 @@ Game.register({
         running = true;
         last = performance.now();
         ctx.frame(loop);
+        if (touch) el.querySelector('.pad').scrollIntoView({ behavior: 'smooth', block: 'end' });
       };
 
       function spawn(big) {
-        const sp = SPEEDS[sIdx];
         if (big) {
           // крупный астероид, нацеленный прямо в корабль
           const x = W + 70, y = ship.y;
@@ -273,7 +351,7 @@ Game.register({
 
       function loop(now) {
         if (!running) return;
-        let dt = Math.min(0.05, (now - last) / 1000);
+        const dt = Math.min(0.05, (now - last) / 1000);
         last = now;
         update(dt);
         draw();
@@ -290,7 +368,11 @@ Game.register({
         if (keys.arrowdown || keys.s || keys['ы']) ay += 1;
         if (keys.arrowleft || keys.a || keys['ф']) ax -= 1;
         if (keys.arrowright || keys.d || keys['в']) ax += 1;
-        if (target) {
+        if (joy.id !== null) {
+          // джойстик: чем дальше ручка от центра, тем быстрее
+          ship.vx += (joy.x * max * 1.1 - ship.vx) * Math.min(1, dt * 12);
+          ship.vy += (joy.y * max * 1.1 - ship.vy) * Math.min(1, dt * 12);
+        } else if (target) {
           const dx = target.x - ship.x, dy = target.y - ship.y;
           ship.vx = clamp(dx * 6, -max, max);
           ship.vy = clamp(dy * 6, -max, max);
@@ -310,7 +392,8 @@ Game.register({
         // крупный астероид в середине пути
         if (!bigDone && progress > 0.48) {
           bigDone = true; bigWarn = 3.2;
-          ctx.mc('<b>Крупный астероид прямо по курсу!</b> Смотри на красную линию и уходи с его траектории!', 'alarm');
+          ctx.mc(L('<b>Крупный астероид прямо по курсу!</b> Смотри на красную линию и уходи с его траектории!',
+                   '<b>Big asteroid dead ahead!</b> Watch the red line and get out of its path!'), 'alarm');
           spawn(true);
         }
         if (bigWarn > 0) bigWarn -= dt;
@@ -329,7 +412,6 @@ Game.register({
           r.y += r.vy * dt;
           r.rot += r.vr * dt;
           if (r.y < -r.r || r.y > H + r.r) r.vy *= -1;
-          // столкновение
           const d = Math.hypot(r.x - ship.x, r.y - ship.y);
           if (inv <= 0 && d < r.r * 0.85 + ship.r) { hit(r); }
           else if (!r.counted && d < r.r + ship.r + 18 && r.x < ship.x) { r.counted = true; closeCalls++; }
@@ -346,13 +428,18 @@ Game.register({
       function hit(r) {
         shields--; hits++; inv = 1.6; shakeT = 0.35;
         sfx.hit();
+        if (navigator.vibrate) navigator.vibrate(120);
         if (!r.big) r.dead = true;
         for (let i = 0; i < 18; i++) sparks.push({ x: ship.x, y: ship.y, vx: (Math.random() - 0.5) * 300, vy: (Math.random() - 0.5) * 300, life: 0.6 });
         if (shields <= 0) {
           running = false;
-          ctx.after(700, () => ctx.fail('Щиты корабля исчерпаны — три столкновения с астероидами.', 'Смотри на пунктир радара: уходи с линии заранее. И попробуй скорость «Тихо» — у тебя будет больше времени на реакцию.'));
+          ctx.after(700, () => ctx.fail(
+            L('Щиты корабля исчерпаны — три столкновения с астероидами.', 'The ship’s shields are gone — three asteroid hits.'),
+            L('Смотри на пунктир радара: уходи с линии заранее. И попробуй скорость «Тихо» — у тебя будет больше времени на реакцию.',
+              'Watch the radar lines and move out of the way early. Try the “Slow” speed — you’ll have more time to react.')));
         } else {
-          ctx.mc(`Удар по корпусу! Осталось щитов: <b>${shields}</b>. Сбавь скорость и следи за траекториями.`, 'bad');
+          ctx.mc(L(`Удар по корпусу! Осталось щитов: <b>${shields}</b>. Сбавь скорость и следи за траекториями.`,
+                   `Hull hit! Shields left: <b>${shields}</b>. Slow down and watch the trajectories.`), 'bad');
         }
       }
 
@@ -361,12 +448,17 @@ Game.register({
         draw(true);
         let score = 3;
         const notes = [];
-        if (routeOk && routeMistakes === 0) notes.push({ ok: true, text: 'Выбран самый безопасный маршрут с первого раза.' });
-        else { score--; notes.push({ ok: false, text: routeOk ? 'Безопасный маршрут найден не с первого раза: сравнивай риск и запас топлива.' : 'Выбран рискованный прямой маршрут. Безопаснее был обходной: мало медленных астероидов, и топлива хватает.' }); }
-        if (hits === 0) notes.push({ ok: true, text: 'Ни одного столкновения — идеальное пилотирование!' });
-        else { score -= hits >= 2 ? 2 : 1; notes.push({ ok: false, text: `Столкновений: ${hits}. Уходи с траектории астероида заранее.` }); }
-        if (closeCalls > 0) notes.push({ ok: true, text: `Опасных сближений, из которых ты вышел без повреждений: ${closeCalls}.` });
-        ctx.mc('Стыковка со станцией «Орбита-7» прошла успешно. Отличная работа, пилот!', 'good');
+        if (routeOk && routeMistakes === 0) notes.push({ ok: true, text: L('Выбран самый безопасный маршрут с первого раза.', 'You chose the safest route on the first try.') });
+        else {
+          score--;
+          notes.push({ ok: false, text: routeOk
+            ? L('Безопасный маршрут найден не с первого раза: сравнивай риск и запас топлива.', 'It took more than one try to find the safe route: compare the risk and the fuel.')
+            : L('Выбран рискованный прямой маршрут. Безопаснее был обходной: мало медленных астероидов, и топлива хватает.', 'You took the risky direct route. The detour was safer: few slow asteroids and enough fuel.') });
+        }
+        if (hits === 0) notes.push({ ok: true, text: L('Ни одного столкновения — идеальное пилотирование!', 'Not a single hit — perfect piloting!') });
+        else { score -= hits >= 2 ? 2 : 1; notes.push({ ok: false, text: L(`Столкновений: ${hits}. Уходи с траектории астероида заранее.`, `Hits: ${hits}. Move out of an asteroid’s path early.`) }); }
+        if (closeCalls > 0) notes.push({ ok: true, text: L(`Опасных сближений, из которых ты вышел без повреждений: ${closeCalls}.`, `Close calls you escaped without damage: ${closeCalls}.`) });
+        ctx.mc(L('Стыковка со станцией «Орбита-7» прошла успешно. Отличная работа, пилот!', 'Docking with “Orbit-7” station complete. Great job, pilot!'), 'good');
         ctx.after(1500, () => ctx.finish(score, notes));
       }
 
@@ -374,7 +466,6 @@ Game.register({
       function draw(final) {
         g.save();
         if (shakeT > 0) g.translate((Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12);
-        // фон из Higgsfield, медленно «плывёт» влево
         drawBg();
         stars.forEach(s => { g.fillStyle = `rgba(255,255,255,${0.3 + s.z * 0.7})`; g.fillRect(s.x, s.y, 1 + s.z * 2, 1 + s.z * 2); });
 
@@ -414,15 +505,15 @@ Game.register({
         // предупреждение
         if (bigWarn > 0 && Math.floor(bigWarn * 4) % 2 === 0) {
           g.fillStyle = 'rgba(255,84,104,0.18)'; g.fillRect(0, 0, W, H);
-          g.fillStyle = '#fff'; g.font = '900 30px Nunito, sans-serif'; g.textAlign = 'center';
-          g.fillText('АСТЕРОИД ПО КУРСУ!', W / 2, 60);
+          g.fillStyle = '#fff'; g.font = '30px "Russo One", Nunito, sans-serif'; g.textAlign = 'center';
+          g.fillText(L('АСТЕРОИД ПО КУРСУ!', 'ASTEROID AHEAD!'), W / 2, 100);
         }
         g.restore();
         hud();
         if (final) {
           g.fillStyle = 'rgba(13,18,64,0.5)'; g.fillRect(0, 0, W, H);
-          g.fillStyle = '#fff'; g.font = '900 44px Nunito, sans-serif'; g.textAlign = 'center';
-          g.fillText('Станция достигнута!', W / 2, H / 2);
+          g.fillStyle = '#fff'; g.font = '44px "Russo One", Nunito, sans-serif'; g.textAlign = 'center';
+          g.fillText(L('Станция достигнута!', 'Station reached!'), W / 2, H / 2);
         }
       }
 
@@ -441,24 +532,27 @@ Game.register({
       }
 
       function hud() {
+        // на телефоне поле мельче, поэтому подписи крупнее
+        const big = touch ? 1.45 : 1;
         // прогресс
         g.fillStyle = 'rgba(13,18,64,0.7)';
-        roundRect(16, 14, 330, 46, 14); g.fill();
-        g.fillStyle = '#cfe6ff'; g.font = '800 13px Nunito, sans-serif'; g.textAlign = 'left';
-        g.fillText('ДО СТАНЦИИ', 30, 32);
-        g.fillStyle = 'rgba(255,255,255,0.15)'; roundRect(30, 39, 300, 10, 5); g.fill();
-        g.fillStyle = '#ffb454'; roundRect(30, 39, 300 * clamp(progress, 0, 1), 10, 5); g.fill();
+        roundRect(16, 14, 330 * big, 46 * big, 14); g.fill();
+        g.fillStyle = '#cfe6ff'; g.font = `800 ${13 * big}px Nunito, sans-serif`; g.textAlign = 'left';
+        g.fillText(L('ДО СТАНЦИИ', 'TO STATION'), 30, 14 + 18 * big);
+        g.fillStyle = 'rgba(255,255,255,0.15)'; roundRect(30, 14 + 25 * big, 300 * big, 10 * big, 5); g.fill();
+        g.fillStyle = '#ffb454'; roundRect(30, 14 + 25 * big, 300 * big * clamp(progress, 0, 1), 10 * big, 5); g.fill();
         // щиты
-        g.fillStyle = 'rgba(13,18,64,0.7)'; roundRect(W - 196, 14, 180, 46, 14); g.fill();
-        g.fillStyle = '#cfe6ff'; g.fillText('ЩИТЫ', W - 182, 42);
+        const sw = 180 * big;
+        g.fillStyle = 'rgba(13,18,64,0.7)'; roundRect(W - sw - 16, 14, sw, 46 * big, 14); g.fill();
+        g.fillStyle = '#cfe6ff'; g.fillText(L('ЩИТЫ', 'SHIELDS'), W - sw - 2, 14 + 28 * big);
         for (let i = 0; i < 3; i++) {
           g.fillStyle = i < shields ? '#6fd3ff' : 'rgba(255,255,255,0.15)';
-          roundRect(W - 120 + i * 32, 26, 24, 22, 6); g.fill();
+          roundRect(W - 16 - (3 - i) * 30 * big, 14 + 12 * big, 22 * big, 22 * big, 6); g.fill();
         }
-        // скорость
-        g.fillStyle = 'rgba(13,18,64,0.7)'; roundRect(16, H - 52, 210, 38, 12); g.fill();
+        if (touch) return; // на телефоне скорость видна на кнопках под полем
+        g.fillStyle = 'rgba(13,18,64,0.7)'; roundRect(16, H - 52, 230, 38, 12); g.fill();
         g.fillStyle = '#ffd166'; g.font = '800 15px Nunito, sans-serif';
-        g.fillText('Скорость: ' + ['тихо', 'средне', 'быстро'][sIdx] + ' ' + '▸'.repeat(sIdx + 1), 30, H - 27);
+        g.fillText(L('Скорость: ', 'Speed: ') + L(['тихо', 'средне', 'быстро'], ['slow', 'medium', 'fast'])[sIdx] + ' ' + '▸'.repeat(sIdx + 1), 30, H - 27);
       }
       function roundRect(x, y, w, hh, r) {
         g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + hh, r); g.arcTo(x + w, y + hh, x, y + hh, r);
