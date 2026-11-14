@@ -1,0 +1,413 @@
+/* =====================================================================
+   Тренажёр юного астронавта — ядро игры
+   Экран старта, мостик (выбор миссии), рамка миссии, итоги, сертификат.
+   Каждая миссия лежит в js/missions/*.js и регистрируется через Game.register().
+   ===================================================================== */
+(function () {
+  'use strict';
+
+  const SAVE_KEY = 'junior-astronaut-v1';
+  const app = document.getElementById('app');
+  const missions = [];
+
+  /* ---------- сохранение ---------- */
+  let memory = {};
+  function load() {
+    try { return JSON.parse(localStorage.getItem(SAVE_KEY)) || {}; }
+    catch (e) { return memory; }
+  }
+  function persist() {
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); }
+    catch (e) { memory = save; }
+  }
+  const save = load();
+  save.best = save.best || {};
+
+  /* ---------- маленькие помощники ---------- */
+  function h(html) {
+    const t = document.createElement('template');
+    t.innerHTML = html.trim();
+    return t.content.firstElementChild;
+  }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+  function shuffle(a) {
+    a = a.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+  const pick = a => a[Math.floor(Math.random() * a.length)];
+  // Картинка из Higgsfield (assets/sprites). Если файла нет — просто не показываем.
+  function ico(name, cls = '') {
+    const src = name.includes('.') ? name : name + '.png';
+    return `<img class="ico ${cls}" src="assets/sprites/${src}" alt="" onerror="this.remove()">`;
+  }
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+  function setBg(name) {
+    document.querySelector('.bg').style.backgroundImage = `url("assets/img/${name}.jpg")`;
+  }
+
+  /* ---------- звук (без файлов, через WebAudio) ---------- */
+  let ac;
+  function beep(freq = 600, dur = 0.12, type = 'sine', vol = 0.07, delay = 0) {
+    if (save.mute) return;
+    try {
+      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      const t0 = ac.currentTime + delay;
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = type; o.frequency.setValueAtTime(freq, t0);
+      g.gain.setValueAtTime(vol, t0);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(g).connect(ac.destination);
+      o.start(t0); o.stop(t0 + dur + 0.02);
+    } catch (e) { /* звук не обязателен */ }
+  }
+  const sfx = {
+    click: () => beep(820, 0.05, 'triangle', 0.04),
+    ok: () => { beep(660, 0.1); beep(990, 0.16, 'sine', 0.07, 0.09); },
+    bad: () => beep(170, 0.28, 'square', 0.04),
+    alarm: () => { beep(880, 0.18, 'sawtooth', 0.035); beep(620, 0.18, 'sawtooth', 0.035, 0.2); },
+    radio: () => { beep(1200, 0.06, 'square', 0.025); beep(1500, 0.06, 'square', 0.025, 0.09); beep(1200, 0.06, 'square', 0.025, 0.18); },
+    hit: () => { beep(120, 0.35, 'sawtooth', 0.07); beep(70, 0.4, 'square', 0.05, 0.05); },
+    win: () => [523, 659, 784, 1046].forEach((f, i) => beep(f, 0.2, 'sine', 0.07, i * 0.12)),
+    type: () => beep(1800 + Math.random() * 400, 0.015, 'square', 0.012)
+  };
+
+  /* ---------- ранги ---------- */
+  const RANKS = [
+    { min: 0, name: 'Кадет' },
+    { min: 3, name: 'Стажёр' },
+    { min: 6, name: 'Бортинженер' },
+    { min: 9, name: 'Пилот' },
+    { min: 12, name: 'Командир миссии' }
+  ];
+  function totalStars() { return missions.reduce((s, m) => s + (save.best[m.id] || 0), 0); }
+  function rank() { const t = totalStars(); return RANKS.filter(r => t >= r.min).pop(); }
+  function starsHtml(n, max = 3, cls = '') {
+    let s = '';
+    for (let i = 0; i < max; i++) s += `<span class="star ${i < n ? 'on' : ''} ${cls}"></span>`;
+    return `<span class="stars" aria-label="${n} из ${max} звёзд">${s}</span>`;
+  }
+
+  /* ---------- активная миссия: таймеры, чтобы всё чистилось при выходе ---------- */
+  let live = null;
+  function stopLive() {
+    if (!live) return;
+    live.timers.forEach(id => { clearTimeout(id); clearInterval(id); });
+    live.rafs.forEach(id => cancelAnimationFrame(id));
+    live.cleanups.forEach(fn => { try { fn(); } catch (e) {} });
+    live.dead = true;
+    live = null;
+  }
+
+  /* =====================================================================
+     ЭКРАНЫ
+     ===================================================================== */
+
+  function screenStart() {
+    stopLive();
+    setBg('bridge');
+    app.innerHTML = '';
+    const el = h(`
+      <section class="start fade-in">
+        <div class="panel start-card">
+          <img class="start-logo" src="assets/sprites/logo.png" alt="Эмблема учебного центра">
+          <p class="eyebrow">Junior Astronaut Mission Trainer</p>
+          <h1>Тренажёр юного&nbsp;астронавта</h1>
+          <p class="lead">Перед настоящим полётом каждый астронавт проходит тренировки. Пройди четыре испытания на борту учебного корабля «Звёздный вихрь» и получи сертификат!</p>
+          <ul class="start-list">
+            <li><i class="thumb" style="background-image:url('assets/img/asteroids.jpg')"></i><div><b>Астероиды</b><span>пилотирование</span></div></li>
+            <li><i class="thumb" style="background-image:url('assets/img/oxygen.jpg')"></i><div><b>Утечка кислорода</b><span>ремонт</span></div></li>
+            <li><i class="thumb" style="background-image:url('assets/img/storm.jpg')"></i><div><b>Солнечная буря</b><span>защита</span></div></li>
+            <li><i class="thumb" style="background-image:url('assets/img/power.jpg')"></i><div><b>Поломка питания</b><span>энергия</span></div></li>
+          </ul>
+          <form class="name-form">
+            <label for="cadet">Как тебя зовут, кадет?</label>
+            <div class="row">
+              <input id="cadet" maxlength="24" autocomplete="off" placeholder="Твоё имя" value="${esc(save.name || '')}" required>
+              <button class="btn big orange" type="submit">На борт!</button>
+            </div>
+          </form>
+        </div>
+      </section>`);
+    app.appendChild(el);
+    const input = el.querySelector('#cadet');
+    if (!save.name) input.focus();
+    el.querySelector('form').addEventListener('submit', e => {
+      e.preventDefault();
+      const name = input.value.trim();
+      if (!name) { input.focus(); return; }
+      save.name = name; persist();
+      sfx.ok();
+      screenHub();
+    });
+  }
+
+  function screenHub() {
+    stopLive();
+    setBg('bridge');
+    const total = totalStars();
+    const done = missions.filter(m => save.best[m.id]).length;
+    const r = rank();
+    app.innerHTML = '';
+    const el = h(`
+      <section class="hub fade-in">
+        <header class="hub-top panel">
+          <div class="who">
+            ${ico('cadet', 'avatar')}
+            <div>
+              <div class="eyebrow">${esc(r.name)}</div>
+              <div class="cadet-name">${esc(save.name || 'Кадет')}</div>
+            </div>
+          </div>
+          <div class="progress-wrap">
+            <div class="progress-label">Подготовка: <b>${done} из ${missions.length}</b> испытаний · <b>${total}</b>  из ${missions.length * 3}</div>
+            <div class="bar"><i style="width:${(total / (missions.length * 3)) * 100}%"></i></div>
+          </div>
+          <div class="top-actions">
+            <button class="btn ghost small" data-act="mute">${save.mute ? 'Звук: выкл' : 'Звук: вкл'}</button>
+            <button class="btn ghost small" data-act="name">Сменить имя</button>
+          </div>
+        </header>
+
+        <div class="hub-title">
+          <h2>Мостик корабля «Звёздный вихрь»</h2>
+          <p>Выбери тренировку. Их можно проходить в любом порядке и повторять, чтобы собрать все звёзды.</p>
+        </div>
+
+        <div class="cards"></div>
+
+        <div class="cert-cta panel ${done === missions.length ? 'ready' : ''}">
+          ${done === missions.length
+            ? `<div>${ico('logo')}<span><b>Все испытания пройдены!</b> Ты готов к настоящей миссии.</span></div><button class="btn orange" data-act="cert">Получить сертификат</button>`
+            : `<div>${ico('logo')}<span>Пройди все ${missions.length} испытания, чтобы получить <b>сертификат астронавта</b>.</span></div>`}
+        </div>
+      </section>`);
+    const cards = el.querySelector('.cards');
+    missions.forEach((m, i) => {
+      const best = save.best[m.id] || 0;
+      const c = h(`
+        <article class="mcard panel ${best ? 'done' : ''}" style="--d:${i * 70}ms">
+          <div class="mcard-img" style="background-image:url('assets/img/${m.img}.jpg')">
+            <span class="mnum">Испытание ${i + 1}</span>
+            <span class="mtag">${esc(m.tag)}</span>
+          </div>
+          <div class="mcard-body">
+            <h3>${esc(m.title)}</h3>
+            <p>${esc(m.situation)}</p>
+            <div class="chips">${m.skills.map(s => `<span class="chip">${esc(s)}</span>`).join('')}</div>
+            <div class="mcard-foot">
+              ${starsHtml(best)}
+              <button class="btn ${best ? '' : 'orange'}">${best ? 'Повторить' : 'Начать'}</button>
+            </div>
+          </div>
+        </article>`);
+      c.querySelector('button').addEventListener('click', () => { sfx.click(); runMission(m); });
+      c.querySelector('.mcard-img').addEventListener('click', () => { sfx.click(); runMission(m); });
+      cards.appendChild(c);
+    });
+    el.addEventListener('click', e => {
+      const act = e.target.closest('[data-act]');
+      if (!act) return;
+      const a = act.dataset.act;
+      if (a === 'mute') { save.mute = !save.mute; persist(); act.textContent = save.mute ? 'Звук: выкл' : 'Звук: вкл'; sfx.click(); }
+      if (a === 'name') screenStart();
+      if (a === 'cert') screenCertificate();
+    });
+    app.appendChild(el);
+  }
+
+  /* ---------- рамка миссии ---------- */
+  function runMission(m) {
+    stopLive();
+    setBg(m.img);
+    app.innerHTML = '';
+    const el = h(`
+      <section class="mission fade-in">
+        <header class="mbar panel">
+          <button class="btn ghost small" data-act="back">← На мостик</button>
+          <div class="mtitle">${esc(m.title)}</div>
+          <ol class="steps"></ol>
+          <div class="mstat"></div>
+        </header>
+        <div class="mc-slot"></div>
+        <div class="stage"></div>
+      </section>`);
+    app.appendChild(el);
+    el.querySelector('[data-act=back]').addEventListener('click', () => { sfx.click(); screenHub(); });
+
+    const ctx = live = { timers: [], rafs: [], cleanups: [], dead: false, mission: m, mistakes: 0 };
+    const stepsEl = el.querySelector('.steps');
+    const mcSlot = el.querySelector('.mc-slot');
+    ctx.stage = el.querySelector('.stage');
+    ctx.stat = el.querySelector('.mstat');
+    ctx.root = el;
+    Object.assign(ctx, {
+      h, esc, shuffle, pick, clamp, sfx, starsHtml, ico,
+      after(ms, fn) { const id = setTimeout(() => { if (!ctx.dead) fn(); }, ms); ctx.timers.push(id); return id; },
+      every(ms, fn) { const id = setInterval(() => { if (!ctx.dead) fn(); }, ms); ctx.timers.push(id); return id; },
+      frame(fn) { const id = requestAnimationFrame(t => { if (!ctx.dead) fn(t); }); ctx.rafs.push(id); return id; },
+      onCleanup(fn) { ctx.cleanups.push(fn); },
+      steps(names) {
+        ctx._steps = names;
+        stepsEl.innerHTML = names.map((n, i) => `<li data-i="${i}"><span>${i + 1}</span><em>${esc(n)}</em></li>`).join('');
+      },
+      step(i) {
+        stepsEl.querySelectorAll('li').forEach((li, j) => {
+          li.classList.toggle('now', j === i);
+          li.classList.toggle('past', j < i);
+        });
+        ctx.stage.innerHTML = '';
+        ctx.stage.classList.remove('wide');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      },
+      /* Сообщение от Центра управления полётами */
+      mc(text, mood = 'info') {
+        mcSlot.innerHTML = '';
+        if (!text) return;
+        const b = h(`<div class="mc screen ${mood}" role="status">
+            <div class="mc-ava"><img src="assets/sprites/mc.png" alt="ЦУП"></div>
+            <div class="mc-text"><b>Центр управления:</b> <span></span></div>
+          </div>`);
+        b.querySelector('.mc-text span').innerHTML = text;
+        mcSlot.appendChild(b);
+        if (mood === 'alarm') sfx.alarm(); else if (mood === 'bad') sfx.bad(); else sfx.radio();
+      },
+      /* Итог: stars 1..3, notes — что получилось / что улучшить */
+      finish(stars, notes = []) {
+        stars = clamp(Math.round(stars), 1, 3);
+        const prev = save.best[m.id] || 0;
+        if (stars > prev) { save.best[m.id] = stars; persist(); }
+        stopLive();
+        screenResult(m, stars, notes, stars > prev && prev > 0);
+      },
+      fail(reason, tip) {
+        stopLive();
+        screenFail(m, reason, tip);
+      },
+      mistake() { ctx.mistakes++; }
+    });
+    m.start(ctx);
+  }
+
+  function screenResult(m, stars, notes, improved) {
+    sfx.win();
+    app.innerHTML = '';
+    const idx = missions.indexOf(m);
+    const next = missions.find((x, i) => i > idx && !save.best[x.id]) || missions.find(x => !save.best[x.id]);
+    const el = h(`
+      <section class="result fade-in">
+        <div class="panel result-card">
+          <p class="eyebrow">Испытание пройдено</p>
+          <h2>${esc(m.title)}</h2>
+          <div class="big-stars">${starsHtml(stars, 3, 'pop')}</div>
+          <p class="verdict">${['', 'Задание выполнено, но есть что улучшить.', 'Хорошая работа, кадет!', 'Безупречно! Настоящий астронавт!'][stars]}${improved ? ' <b>Новый рекорд!</b>' : ''}</p>
+          ${notes.length ? `<ul class="notes">${notes.map(n => `<li class="${n.ok ? 'ok' : 'warn'}">${n.text}</li>`).join('')}</ul>` : ''}
+          <div class="learn screen">
+            <h3>Что ты узнал</h3>
+            <ul>${m.learn.map(t => `<li>${t}</li>`).join('')}</ul>
+          </div>
+          <div class="row center">
+            <button class="btn ghost" data-act="again">Ещё раз</button>
+            <button class="btn" data-act="hub">На мостик</button>
+            ${next ? `<button class="btn orange" data-act="next">Дальше: ${esc(next.title)}</button>` : ''}
+          </div>
+        </div>
+      </section>`);
+    el.querySelector('[data-act=again]').onclick = () => runMission(m);
+    el.querySelector('[data-act=hub]').onclick = screenHub;
+    const n = el.querySelector('[data-act=next]');
+    if (n) n.onclick = () => runMission(next);
+    app.appendChild(el);
+    confetti();
+  }
+
+  function screenFail(m, reason, tip) {
+    sfx.bad();
+    app.innerHTML = '';
+    const el = h(`
+      <section class="result fade-in">
+        <div class="panel result-card fail">
+          ${ico('mc', 'fail-ico')}
+          <p class="eyebrow">Тренировка остановлена</p>
+          <h2>${esc(m.title)}</h2>
+          <p class="verdict">${reason}</p>
+          ${tip ? `<p class="tip"><b>Совет инструктора:</b> ${tip}</p>` : ''}
+          <p class="small muted">Это тренажёр — здесь ошибаться не страшно. Именно для этого астронавты и тренируются!</p>
+          <div class="row center">
+            <button class="btn ghost" data-act="hub">На мостик</button>
+            <button class="btn orange" data-act="again">Попробовать снова</button>
+          </div>
+        </div>
+      </section>`);
+    el.querySelector('[data-act=again]').onclick = () => runMission(m);
+    el.querySelector('[data-act=hub]').onclick = screenHub;
+    app.appendChild(el);
+  }
+
+  function screenCertificate() {
+    stopLive();
+    setBg('bridge');
+    const total = totalStars();
+    const date = new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+    app.innerHTML = '';
+    const el = h(`
+      <section class="result fade-in">
+        <div class="certificate panel">
+          <div class="cert-inner">
+            ${ico('logo')}
+            <p class="eyebrow">Учебный центр «Звёздный вихрь»</p>
+            <h2>Сертификат юного астронавта</h2>
+            <p>Настоящим подтверждается, что</p>
+            <div class="cert-name">${esc(save.name || 'Кадет')}</div>
+            <p>успешно прошёл(ла) подготовку к космической миссии и получает звание</p>
+            <div class="cert-rank">${esc(rank().name)}</div>
+            <ul class="cert-list">
+              ${missions.map(m => `<li>${esc(m.title)} ${starsHtml(save.best[m.id] || 0)}</li>`).join('')}
+            </ul>
+            <div class="cert-foot"><span>Всего: <b>${total} </b></span><span>${date}</span><span>Руководитель полётов: ЦУП</span></div>
+          </div>
+        </div>
+        <div class="row center no-print">
+          <button class="btn ghost" data-act="hub">На мостик</button>
+          <button class="btn orange" data-act="print">Распечатать</button>
+        </div>
+      </section>`);
+    el.querySelector('[data-act=hub]').onclick = screenHub;
+    el.querySelector('[data-act=print]').onclick = () => window.print();
+    app.appendChild(el);
+    sfx.win();
+    confetti();
+  }
+
+  /* ---------- конфетти ---------- */
+  function confetti() {
+    const box = h('<div class="confetti" aria-hidden="true"></div>');
+    const colors = ['#ff9a3c', '#5fd8ff', '#8a7ff0', '#ffd166', '#ff8fc0', '#fff'];
+    for (let i = 0; i < 70; i++) {
+      const p = document.createElement('i');
+      p.style.left = Math.random() * 100 + '%';
+      p.style.background = pick(colors);
+      p.style.animationDelay = Math.random() * 0.6 + 's';
+      p.style.animationDuration = 1.8 + Math.random() * 1.6 + 's';
+      p.style.transform = `rotate(${Math.random() * 360}deg)`;
+      box.appendChild(p);
+    }
+    document.body.appendChild(box);
+    setTimeout(() => box.remove(), 4000);
+  }
+
+  /* =====================================================================
+     ПУБЛИЧНЫЙ API
+     ===================================================================== */
+  window.Game = {
+    register(m) { missions.push(m); missions.sort((a, b) => a.order - b.order); },
+    boot() { save.name ? screenHub() : screenStart(); },
+    hub: screenHub
+  };
+})();
