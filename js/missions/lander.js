@@ -55,7 +55,7 @@ Game.register({
           <div class="panel card" style="margin-top:16px"><div class="fact">${Game.isTouch
             ? L('<b>Управление:</b> большая кнопка «Газ» включает двигатель, кнопки по бокам наклоняют модуль.', '<b>Controls:</b> the big “Thrust” button fires the engine, the side buttons tilt the lander.')
             : L('<b>Управление:</b> <span class="kbd">↑</span> / <span class="kbd">W</span> / <span class="kbd">Пробел</span> — двигатель, <span class="kbd">←</span> <span class="kbd">→</span> — наклон.', '<b>Controls:</b> <span class="kbd">↑</span> / <span class="kbd">W</span> / <span class="kbd">Space</span> — engine, <span class="kbd">←</span> <span class="kbd">→</span> — tilt.')}
-          ${L('Сядь на <b>площадку с огнями</b>: вертикальная скорость меньше 2 м/с, модуль ровно.', 'Land on the <b>pad with lights</b>: vertical speed under 2 m/s, lander level.')}</div></div>
+          ${L('Сядь на <b>площадку с огнями</b>: вертикальная скорость меньше 4 м/с, модуль ровно.', 'Land on the <b>pad with lights</b>: vertical speed under 4 m/s, lander level.')}</div></div>
         </div>`);
       el.querySelectorAll('.place-card').forEach(b => b.onclick = () => { sfx.click(); B = BODY[b.dataset.b]; fly(); });
       ctx.stage.appendChild(el);
@@ -156,7 +156,7 @@ Game.register({
         done = true;
         L_.y = gy + 2.2;
         const onPad = Math.abs(L_.x - padX) < padW / 2 - 2;
-        const soft = -L_.vy < 2.2, slide = Math.abs(L_.vx) < 1.5, level = Math.abs(L_.a) < 0.22;
+        const soft = -L_.vy < 4, slide = Math.abs(L_.vx) < 2.5, level = Math.abs(L_.a) < 0.22;
         const vy = -L_.vy, vx = Math.abs(L_.vx);
         if (onPad && soft && slide && level) {
           sfx.win();
@@ -174,7 +174,7 @@ Game.register({
           sfx.hit();
           for (let i = 0; i < 40; i++) sparks.push({ x: L_.x, y: L_.y, vx: (Math.random() - 0.5) * 30, vy: Math.random() * 20, life: 1 + Math.random() });
           const why = !onPad ? L('Модуль сел мимо площадки, на неровный грунт.', 'The lander missed the pad and hit rough ground.')
-            : !soft ? L(`Слишком быстро: ${vy.toFixed(1).replace('.', ',')} м/с (нужно меньше 2).`, `Too fast: ${vy.toFixed(1)} m/s (needs to be under 2).`)
+            : !soft ? L(`Слишком быстро: ${vy.toFixed(1).replace('.', ',')} м/с (нужно меньше 4).`, `Too fast: ${vy.toFixed(1)} m/s (needs to be under 4).`)
             : !level ? L('Модуль стоял с наклоном и опрокинулся.', 'The lander was tilted and tipped over.')
             : L(`Модуль скользил вбок со скоростью ${vx.toFixed(1)} м/с.`, `The lander was sliding sideways at ${vx.toFixed(1)} m/s.`);
           ctx.mc(L(`<b>Жёсткая посадка!</b> ${why}`, `<b>Hard landing!</b> ${why}`), 'bad');
@@ -249,8 +249,8 @@ Game.register({
           if (val !== null) { g.font = '900 16px Nunito, sans-serif'; g.fillStyle = color; g.fillText(val, x, 44); }
         };
         item(0, L('Высота', 'Altitude'), `${alt.toFixed(0)} ${L('м', 'm')}`, '#fff');
-        item(1, L('Вниз', 'Down'), `${vy.toFixed(1)} ${L('м/с', 'm/s')}`, vy < 2.2 ? '#7ee0a0' : vy < 5 ? '#ffd166' : '#ff8a9a');
-        item(2, L('Вбок', 'Sideways'), `${Math.abs(L_.vx).toFixed(1)} ${L('м/с', 'm/s')}`, Math.abs(L_.vx) < 1.5 ? '#7ee0a0' : '#ffd166');
+        item(1, L('Вниз', 'Down'), `${vy.toFixed(1)} ${L('м/с', 'm/s')}`, vy < 4 ? '#7ee0a0' : vy < 6 ? '#ffd166' : '#ff8a9a');
+        item(2, L('Вбок', 'Sideways'), `${Math.abs(L_.vx).toFixed(1)} ${L('м/с', 'm/s')}`, Math.abs(L_.vx) < 2.5 ? '#7ee0a0' : '#ffd166');
         item(3, L('Топливо', 'Fuel'), null);
         const fx = 10 + cell * 3 + 12, fw = cell - 24;
         g.fillStyle = 'rgba(255,255,255,0.15)'; g.fillRect(fx, 33, fw, 12);
