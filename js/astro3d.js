@@ -254,9 +254,9 @@ window.AstroModel = {
       const knuck = new THREE.Mesh(new THREE.CapsuleGeometry(0.014, 0.07, 4, 10), greyL); knuck.rotation.z = Math.PI / 2; knuck.position.set(0, -0.035, 0.012); hand.add(knuck);
       const fingers = [];
       for (let k = 0; k < 4; k++) { const f = finger(k === 0 || k === 3 ? 0.03 : 0.036); f.position.set(-0.034 + k * 0.023, -0.04, 0.0); f.rotation.set(0.25, 0, (k - 1.5) * 0.08); hand.add(f); fingers.push(f); }
-      const th = finger(0.026); th.position.set(-sd * 0.05, 0.0, 0.015); th.rotation.set(0.3, 0, -sd * 1.05); hand.add(th);
+      const th = finger(0.026); th.position.set(-sd * 0.048, -0.005, -0.012); th.rotation.set(0.5, 0, -sd * 0.7); hand.add(th); // большой палец — со стороны указательного, чуть к ладони
       // указательный палец — ближний к телу
-      g.userData = { sd, elbow, wrist, fingers, thumb: th, index: sd > 0 ? 0 : 3 };
+      g.userData = { sd, elbow, wrist, hand, fingers, thumb: th, index: sd > 0 ? 0 : 3 };
       g.rotation.z = sd * 0.18; elbow.rotation.x = -0.3;
       return g;
     };
@@ -296,8 +296,11 @@ window.AstroModel = {
 
     // pose: 'wave' — машет, 'point' — показывает, 'alarm' — тревожится, 'idle' — стоит
     const ease = (obj, key, target, k) => { obj[key] += (target - obj[key]) * k; };
-    const setArm = (a, sx, sz, ex, ez, wx, wz, curl, indexOut, k) => {
+    // twist — поворот кисти вокруг предплечья: когда рука поднята и согнута вверх,
+    // кисть разворачивается ладонью вперёд, и большой палец остаётся со стороны головы
+    const setArm = (a, sx, sz, ex, ez, wx, wz, curl, indexOut, k, twist = 0) => {
       const u = a.userData;
+      ease(u.hand.rotation, 'y', u.sd * (0.3 + twist), k);
       ease(a.rotation, 'x', sx, k); ease(a.rotation, 'z', u.sd * sz, k);
       ease(u.elbow.rotation, 'x', ex, k); ease(u.elbow.rotation, 'z', u.sd * ez, k);
       ease(u.wrist.rotation, 'x', wx, k); ease(u.wrist.rotation, 'z', u.sd * wz, k);
@@ -305,14 +308,14 @@ window.AstroModel = {
         const c = indexOut && i === u.index ? 0 : curl;
         ease(f.rotation, 'x', 0.15 + c * 1.1, k); ease(f.userData.k2.rotation, 'x', 0.2 + c * 1.2, k);
       });
-      ease(u.thumb.rotation, 'x', 0.3 + curl * 0.6, k);
+      ease(u.thumb.rotation, 'x', 0.5 + curl * 0.6, k);
     };
     function pose(name, t, dt) {
       const k = Math.min(1, dt * 9);
       const sway = Math.sin(t * 1.6);
       if (name === 'wave') {
         // правая рука: плечо отведено в сторону, локоть согнут вверх, кисть машет
-        setArm(armR, -0.15, 1.25, 0, 1.55 + Math.sin(t * 8) * 0.38, 0, Math.sin(t * 8 + 0.6) * 0.35, 0.05, false, k);
+        setArm(armR, -0.15, 1.25, 0, 1.55 + Math.sin(t * 8) * 0.38, 0, Math.sin(t * 8 + 0.6) * 0.35, 0.05, false, k, Math.PI);
         setArm(armL, sway * 0.06, 0.2, -0.35, 0, 0, 0, 0.35, false, k);
       } else if (name === 'point') {
         // правая рука вытянута вперёд-вбок, указательный палец выпрямлен
@@ -321,8 +324,8 @@ window.AstroModel = {
       } else if (name === 'alarm') {
         // обе руки подняты вверх ладонями вперёд и дрожат
         const sh = Math.sin(t * 16) * 0.12;
-        setArm(armR, -0.25, 1.85 + sh, 0, 1.0, 0, 0.25 + sh, 0.0, false, k);
-        setArm(armL, -0.25, 1.85 - sh, 0, 1.0, 0, 0.25 - sh, 0.0, false, k);
+        setArm(armR, -0.25, 1.85 + sh, 0, 1.0, 0, 0.25 + sh, 0.0, false, k, Math.PI);
+        setArm(armL, -0.25, 1.85 - sh, 0, 1.0, 0, 0.25 - sh, 0.0, false, k, Math.PI);
       } else {
         setArm(armR, -sway * 0.06, 0.2, -0.35, 0, 0, 0, 0.35, false, k);
         setArm(armL, sway * 0.06, 0.2, -0.35, 0, 0, 0, 0.35, false, k);
