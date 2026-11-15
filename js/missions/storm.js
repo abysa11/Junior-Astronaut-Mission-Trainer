@@ -45,11 +45,17 @@ Game.register({
       if (left <= 0) { timerOn = false; early = true; stormNow(); }
     });
 
-    incoming();
+    ctx.step(0);
+    ctx.astroBrief([
+      [L('Привет! Я <b>ASTRO</b>. Сегодня узнаем, что такое <b>космическая погода</b>. На Солнце бывают вспышки, и от них летят потоки заряженных частиц.', 'Hi! I’m <b>ASTRO</b>. Today we’ll learn about <b>space weather</b>. The Sun has flares, and they send out streams of charged particles.'), 'wave'],
+      [L('Эти частицы опасны для людей и электроники. Когда приходит буря, экипаж прячется в <b>самом защищённом месте</b>, а технику переводят в <b>безопасный режим</b>.', 'These particles are dangerous for people and electronics. When a storm comes, the crew hides in the <b>best-protected place</b> and the equipment goes into <b>safe mode</b>.'), 'alarm'],
+      [L('Слышишь? Центр управления выходит на связь! Прими сигнал и слушай внимательно.', 'Hear that? Mission Control is calling! Accept the signal and listen carefully.'), 'point']
+    ], L('Принять сигнал →', 'Accept the signal →'), incoming);
 
     /* ---------------- 1. Сигнал ---------------- */
     function incoming() {
       ctx.step(0);
+      ctx.stage.innerHTML = '';
       ctx.mc('');
       const el = h(`
         <div class="panel card incoming">

@@ -39,35 +39,24 @@ Game.register({
     /* ---------------- 1. Брифинг ---------------- */
     function briefing() {
       ctx.step(0);
-      ctx.mc(L('Внимание, пилот! Впереди <b>астероидный пояс</b>. Нужно выбрать маршрут и провести корабль к станции «Орбита-7», не задев ни одного камня.',
-               'Attention, pilot! There is an <b>asteroid belt</b> ahead. Choose a route and fly the ship to the “Orbit-7” station without touching a single rock.'));
       const controls = touch
         ? L('<b>Управление:</b> под игровым полем есть <b>джойстик</b>: положи на него палец и веди в нужную сторону. Справа — кнопки скорости.',
             '<b>Controls:</b> below the game screen there is a <b>joystick</b>: put your thumb on it and slide where you want to fly. Speed buttons are on the right.')
         : L('<b>Управление:</b> <span class="kbd">↑</span> <span class="kbd">↓</span> <span class="kbd">←</span> <span class="kbd">→</span> или <span class="kbd">W A S D</span>, или веди мышкой по полю. Скорость: кнопки или <span class="kbd">1</span> <span class="kbd">2</span> <span class="kbd">3</span>.',
             '<b>Controls:</b> <span class="kbd">↑</span> <span class="kbd">↓</span> <span class="kbd">←</span> <span class="kbd">→</span> or <span class="kbd">W A S D</span>, or drag with the mouse. Speed: buttons or <span class="kbd">1</span> <span class="kbd">2</span> <span class="kbd">3</span>.');
-      const el = h(`
-        <div class="panel card">
-          <div class="task-title"><span class="num">1</span><h2>${L('Как читать траекторию', 'How to read a trajectory')}</h2></div>
-          <div class="closeup">
-            <div class="screen traj-demo">
+      const demo = `<div class="screen traj-demo">
               <svg viewBox="0 0 220 160" preserveAspectRatio="none"><line x1="165" y1="42" x2="72" y2="112" stroke="#ff8a9a" stroke-width="3" stroke-dasharray="8 6"/></svg>
               ${ctx.ico('rock1', 'rock')}
               ${ctx.ico('ship', 'ship')}
               <span class="lbl">${L('РАДАР ТРАЕКТОРИЙ', 'TRAJECTORY RADAR')}</span>
-            </div>
-            <div>
-              <p>${L('У каждого астероида есть <b>направление</b> и <b>скорость</b>. Радар корабля рисует пунктир — путь, по которому камень полетит дальше.',
-                     'Every asteroid has a <b>direction</b> and a <b>speed</b>. The ship’s radar draws a dashed line — the path the rock will follow.')}</p>
-              <p>${L('Если пунктир упирается в твой корабль, он станет <b style="color:var(--bad)">красным</b>: уходи вверх или вниз, пока не поздно!',
-                     'If the line points at your ship, it turns <b style="color:var(--bad)">red</b>: move up or down before it’s too late!')}</p>
-              <div class="fact">${controls}</div>
-            </div>
-          </div>
-          <div class="actions"><button class="btn orange big">${L('Понятно, к маршруту →', 'Got it, to the route →')}</button></div>
-        </div>`);
-      el.querySelector('button').onclick = () => { sfx.click(); routes(); };
-      ctx.stage.appendChild(el);
+            </div>`;
+      ctx.astroBrief([
+        [L('Привет, пилот! Я <b>ASTRO</b>, твой робот-помощник. Впереди <b>астероидный пояс</b>, а нам нужно долететь до станции «Орбита-7», не задев ни одного камня.', 'Hello, pilot! I’m <b>ASTRO</b>, your robot helper. There’s an <b>asteroid belt</b> ahead, and we need to fly to the “Orbit-7” station without touching a single rock.'), 'wave'],
+        [L('У каждого астероида есть <b>направление</b> и <b>скорость</b>. Радар рисует пунктир — путь, по которому камень полетит дальше.', 'Every asteroid has a <b>direction</b> and a <b>speed</b>. The radar draws a dashed line — the path the rock will follow.') + demo, 'point'],
+        [L('Если пунктир упирается в твой корабль, он станет <b style="color:var(--bad)">красным</b> — уходи вверх или вниз, пока не поздно!', 'If the line points at your ship, it turns <b style="color:var(--bad)">red</b> — move up or down before it’s too late!'), 'alarm'],
+        [controls, 'point'],
+        [L('Сначала выберем маршрут: самый безопасный, на который хватит топлива. Поехали!', 'First let’s choose a route: the safest one we have enough fuel for. Let’s go!'), 'wave']
+      ], L('К маршруту →', 'To the route →'), routes);
     }
 
     /* ---------------- 2. Маршрут ---------------- */

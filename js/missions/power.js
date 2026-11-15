@@ -54,13 +54,18 @@ Game.register({
     ];
     let mistakes = 0, angleTries = 0;
 
-    stepPriorities();
+    ctx.step(0);
+    ctx.astroBrief([
+      [L('<b>Авария питания!</b> Главная батарея отключилась, осталась только резервная — <b>12 кВт·ч</b>. Я ASTRO, разберёмся вместе!', '<b>Power emergency!</b> The main battery is down, only the backup is left — <b>12 kWh</b>. I’m ASTRO, let’s sort it out together!'), 'alarm'],
+      [L('Запомни формулу: <b>часы = запас энергии ÷ мощность</b>. Батареи должно хватить на <b>6 часов</b>. Отключи лишнее, но не то, без чего экипаж не выживет!', 'Remember the formula: <b>hours = energy stored ÷ power</b>. The battery must last <b>6 hours</b>. Turn off what’s not needed — but not what the crew can’t live without!'), 'point'],
+      [L('Потом развернёшь солнечную панель к Солнцу и включишь системы по очереди — от самых важных. Ты справишься, бортинженер!', 'Then you’ll turn the solar panel to the Sun and switch the systems back on one by one — the most important first. You can do it, engineer!'), 'wave']
+    ], L('К пульту →', 'To the console →'), stepPriorities);
 
     /* ---------------- 1. Приоритеты ---------------- */
     function stepPriorities() {
       ctx.step(0);
-      ctx.mc(L('<b>Авария питания!</b> Главная батарея отключилась, работает только резервная: <b>12 кВт·ч</b>. Её должно хватить минимум на <b>6 часов</b>, пока мы чиним систему. Отключи лишнее!',
-               '<b>Power emergency!</b> The main battery is down, only the backup is working: <b>12 kWh</b>. It must last at least <b>6 hours</b> while we fix the system. Turn off what you don’t need!'), 'alarm');
+      ctx.mc(L('Нажимай на системы, чтобы выключить лишнее. Справа видно, на сколько часов хватит батареи — нужно минимум <b>6 часов</b>.',
+               'Tap systems to turn off what’s not needed. On the right you can see how many hours the battery will last — you need at least <b>6 hours</b>.'));
       const on = {};
       ITEMS.forEach(i => on[i.id] = true);
       const el = h(`

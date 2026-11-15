@@ -16,6 +16,8 @@ Game.register({
     return L([
       'Энергию считают в <b>киловатт-часах</b>: мощность × время. Если приборы берут 3 кВт, то за 7 часов ночи уйдёт 3 × 7 = 21 кВт·ч.',
       'Марсианская пыль оседает на солнечных панелях и отнимает до половины энергии. Марсоходы иногда спасал ветер, который сдувал пыль.',
+      'Средняя температура на поверхности Марса — около <b>−65 °C</b>. Растения могут расти только в тёплой теплице.',
+      'Давление воздуха на Марсе примерно в <b>100 раз</b> меньше, чем на Земле, а сам воздух почти весь из углекислого газа.',
       'Вода на Марсе есть в виде <b>льда</b> под грунтом. Её можно добывать буром, но для этого нужна энергия.',
       'Картофель — хороший выбор для теплицы: он сытный и неприхотливый. Но растениям нужны свет, вода и время.',
       'Сигнал от Марса до Земли идёт от <b>4 до 24 минут</b>, поэтому экипаж не может ждать подсказки на каждом шагу.',
@@ -23,6 +25,8 @@ Game.register({
     ], [
       'Energy is measured in <b>kilowatt-hours</b>: power × time. If devices use 3 kW, a 7-hour night takes 3 × 7 = 21 kWh.',
       'Martian dust settles on solar panels and can steal up to half the energy. Sometimes the wind saved rovers by blowing the dust away.',
+      'The average surface temperature on Mars is about <b>−65 °C</b>. Plants can only grow in a warm greenhouse.',
+      'Air pressure on Mars is about <b>100 times</b> lower than on Earth, and the air is almost all carbon dioxide.',
       'Mars has water as <b>ice</b> under the ground. A drill can mine it, but that needs energy.',
       'Potatoes are a good greenhouse crop: filling and hardy. But plants need light, water and time.',
       'A signal from Mars to Earth takes <b>4 to 24 minutes</b>, so the crew can’t wait for help at every step.',
@@ -58,8 +62,10 @@ Game.register({
       beds: BEDS.map(c => ({ crop: c, hp: 80 })),
       dust: 0, drill: true, lampsNight: true, heaterNight: true,
       repair: 0, instructions: 0, msgs: [],
-      today: null, broken: {}, blackouts: 0, mistakes: 0, calcOk: 0, done: false
+      today: null, broken: {}, blackouts: 0, mistakes: 0, calcOk: 0, done: false,
+      can: { has: false, liters: 0 }, seen: {}, ghTutorial: 0, indicators: {}, started: false
     };
+    const CAN_CAP = 8, TOL = 0.6; // лейка вмещает 8 л; «зелёная зона» влажности — нужное количество ± 0,6 л
     // инструкции Земли по ремонту корабля (каждая — задача с расчётом)
     const STEPS = [
       { part: true, title: L('Предохранитель двигателя', 'Engine fuse'),
@@ -96,7 +102,8 @@ Game.register({
       if (S.dust < 0.05) S.dust = 0;
       S.today = {
         hot: !!p.hot, watered: false, energyPlanned: false, called: false, cleaned: 0, cleaning: false, decidedDust: false,
-        nightHours: 6 + (S.day % 3), heat: p.dust ? 2 : 1, waitMsg: null
+        nightHours: 6 + (S.day % 3), heat: p.dust ? 2 : 1, waitMsg: null,
+        bedWater: BEDS.map(() => 0), bedZone: BEDS.map(() => 'dry'), tips: {}, calcAsked: false
       };
       if (p.brk) S.broken[p.brk] = true;
       S.time = 0;
@@ -111,6 +118,8 @@ Game.register({
     const potNeed = () => CROPS.potato.need + (S.today.hot ? 1 : 0);
     const cropNeed = c => c === 'potato' ? potNeed() : CROPS[c].need;
     const waterNeed = crops => crops.reduce((sum, c) => sum + BEDS.filter(b => b === c).length * cropNeed(c), 0);
+    const bedNeed = i => cropNeed(BEDS[i]);
+    const bedZone = i => { const m = S.today.bedWater[i], n = bedNeed(i); return m < n - TOL ? 'dry' : m > n + TOL ? 'wet' : 'ok'; };
     const evening = () => clamp(Math.min(cap(), S.battery + production() - dayUse()), 0, 999);
     const icon = n => `<img class="mod" src="${BA}mod-${n}.png" alt="">`;
 
@@ -118,26 +127,11 @@ Game.register({
        ВСТУПЛЕНИЕ
        ================================================================= */
     ctx.step(0);
-    ctx.mc(L('<b>Авария!</b> «Звёздный вихрь» сел на Марс, но двигатель и системы повреждены. Рядом — научная станция с теплицей. Держитесь, мы поможем!',
-             '<b>Emergency!</b> The “Star Whirl” landed on Mars, but the engine and systems are damaged. There’s a research station with a greenhouse nearby. Hold on, we’ll help!'), 'alarm');
-    {
-      const el = h(`
-        <div class="panel card mars-intro">
-          <div class="scene" style="background-image:url('${A}mars-intro.jpg')"></div>
-          <div class="task-title"><span class="num">!</span><h2>${L('10 солов на Марсе', '10 sols on Mars')}</h2></div>
-          <p>${L('Окно запуска к Земле откроется через <b>10 солов</b> (сол — марсианские сутки). До этого нужно выжить на станции и починить корабль.', 'The launch window to Earth opens in <b>10 sols</b> (a sol is a Martian day). Until then you must survive at the station and repair the ship.')}</p>
-          <ul class="rules">
-            <li>${icon('greenhouse')}<span>${L('<b>Теплица:</b> каждый сол поливай грядки. Посчитай, сколько литров нужно, — лишняя вода тоже вредна.', '<b>Greenhouse:</b> water the beds every sol. Work out how many litres are needed — too much water is harmful too.')}</span></li>
-            <li>${icon('battery')}<span>${L('<b>Энергоблок:</b> посчитай, сколько энергии уйдёт за ночь, иначе станция обесточится.', '<b>Power room:</b> work out how much energy the night will take, or the station will black out.')}</span></li>
-            <li>${icon('solar')}<span>${L('<b>Пыль:</b> панели можно промыть водой — но вода нужна и грядкам, а насосы забирают столько энергии, что в этот сол не будет связи с Землёй.', '<b>Dust:</b> you can wash the panels with water — but the beds need water too, and the pumps take so much energy that there’s no contact with Earth that sol.')}</span></li>
-            <li>${icon('antenna')}<span>${L('<b>Связь:</b> только Земля знает, как починить корабль. Каждый сеанс связи — новая инструкция. Их 5, а солов 10.', '<b>Contact:</b> only Earth knows how to fix the ship. Every contact brings a new instruction. There are 5 of them and 10 sols.')}</span></li>
-            <li>${icon('shelter')}<span>${L('<b>Поломки:</b> запчастей мало. Решай, что чинить, — и оставь хотя бы 2 для корабля.', '<b>Breakdowns:</b> spare parts are few. Decide what to fix — and keep at least 2 for the ship.')}</span></li>
-          </ul>
-          <div class="actions"><button class="btn orange big">${L('Выйти к станции →', 'Head to the station →')}</button></div>
-        </div>`);
-      el.querySelector('button').onclick = () => { sfx.click(); begin(); };
-      ctx.stage.appendChild(el);
-    }
+    ctx.astroBrief([
+      [L('Привет! Это я, <b>ASTRO</b>. Это финальное испытание! «Звёздный вихрь» сел на Марс, но при посадке двигатель и системы повредились.', 'Hi! It’s me, <b>ASTRO</b>. This is the final challenge! The “Star Whirl” landed on Mars, but the engine and systems were damaged.'), 'alarm'],
+      [L('Рядом есть научная станция с теплицей. Окно запуска к Земле откроется через <b>10 солов</b> — сол это марсианские сутки. До этого нужно выжить и починить корабль.', 'There’s a research station with a greenhouse nearby. The launch window to Earth opens in <b>10 sols</b> — a sol is a Martian day. Until then we must survive and repair the ship.'), 'point'],
+      [L('На станции я всё покажу и буду подсказывать. Готов выйти на поверхность Марса?', 'At the station I’ll show you everything and give you tips. Ready to step out onto Mars?'), 'wave']
+    ], L('Выйти к станции →', 'Head to the station →'), () => { sfx.click(); begin(); }, { img: A + 'mars-intro.jpg' });
 
     /* =================================================================
        МОДАЛЬНЫЕ ОКНА
@@ -174,28 +168,236 @@ Game.register({
     }
 
     /* =================================================================
+       ASTRO — робот-помощник: диалоги и подсказки
+       ================================================================= */
+    let astroBox = null, astroTimer = null, astroSeqOn = false, astroQueue = [], astroNext = null;
+    function astroRender(text, pose, btns) {
+      if (!astroBox) return;
+      astroBox.hidden = false;
+      astroBox.querySelector('.astro-img').src = `assets/sprites/astro-${pose}.png`;
+      astroBox.querySelector('.astro-text').innerHTML = text;
+      const bw = astroBox.querySelector('.astro-btns'); bw.innerHTML = '';
+      btns.forEach(([label, fn, cls]) => { const b = h(`<button class="btn small ${cls || 'orange'}">${label}</button>`); b.onclick = e => { e.stopPropagation(); sfx.click(); fn(); }; bw.appendChild(b); });
+      astroBox.classList.remove('pop'); void astroBox.offsetWidth; astroBox.classList.add('pop');
+      if (world) world.astroShow(pose);
+    }
+    function astroHide() { clearTimeout(astroTimer); astroNext = null; if (astroBox) astroBox.hidden = true; if (world) world.astroHide(); }
+    // цепочка реплик с кнопкой «Далее»: игрок читает, ходить в это время нельзя
+    function astroSeq(lines, onDone, lastLabel) {
+      clearTimeout(astroTimer); astroSeqOn = true; if (world) world.talk = true;
+      let i = 0;
+      const next = () => {
+        if (i >= lines.length) {
+          astroSeqOn = false; if (world) world.talk = false; astroHide();
+          if (onDone) onDone();
+          const q = astroQueue.pop(); astroQueue = []; if (q && !astroSeqOn) say(q[0], q[1]);
+          return;
+        }
+        const [text, pose] = lines[i++];
+        sfx.radio();
+        astroRender(text, pose || 'point', [[i >= lines.length ? (lastLabel || L('Понятно!', 'Got it!')) : L('Далее →', 'Next →'), next]]);
+        astroNext = next;
+      };
+      next();
+    }
+    // короткая подсказка: не мешает ходить и сама исчезает
+    function say(text, mood) {
+      if (!astroBox) { ctx.mc(text, mood); return; }
+      if (astroSeqOn) { astroQueue.push([text, mood]); return; }
+      clearTimeout(astroTimer);
+      const pose = mood === 'alarm' || mood === 'bad' ? 'alarm' : mood === 'good' ? 'wave' : 'point';
+      if (mood === 'alarm') sfx.alarm(); else if (mood === 'bad') sfx.bad(); else sfx.radio();
+      astroRender(text, pose, [[L('Хорошо', 'OK'), astroHide, 'ghost']]);
+      astroNext = astroHide;
+      astroTimer = ctx.after(Math.max(6500, text.replace(/<[^>]+>/g, '').length * 75), astroHide);
+    }
+    const sayOnce = (key, text, mood) => { const T = S.today; if (!T || T.tips[key]) return; T.tips[key] = true; say(text, mood); };
+
+    // вступление: приветствие, предыстория, цели, карта базы
+    const INTRO = [
+      [L('Привет, астронавт! Добро пожаловать на Марс! Я <b>ASTRO</b>, твой робот-помощник.', 'Hello, astronaut! Welcome to Mars! I’m <b>ASTRO</b>, your robot helper.'), 'wave'],
+      [L('Твой корабль «Звёздный вихрь» повреждён при посадке, и экипаж теперь живёт на этой научной станции.', 'Your spacecraft, the “Star Whirl”, has been damaged, and your crew is now staying at this research station.'), 'point'],
+      [L('Твоя миссия — продержаться <b>10 марсианских дней</b> (они называются солы), поддерживать работу базы, следить за запасами и починить корабль.', 'Your mission is to survive for <b>10 Martian days</b> (they’re called sols), keep the base running, manage resources and repair your spacecraft.'), 'point'],
+      [L('Но будь осторожен! <b>Вода, энергия, еда и запчасти</b> ограничены. Каждое твоё решение повлияет на станцию.', 'But be careful! <b>Water, energy, food and spare parts</b> are limited. Every decision you make will affect the station.'), 'alarm'],
+      [L('Не волнуйся, я буду подсказывать тебе по пути. Ты готов начать миссию?', 'Don’t worry. I’ll guide you along the way. Are you ready to begin your mission?'), 'wave']
+    ];
+    function mapUI(first) {
+      const places = world.places;
+      openModal(`
+        <div class="task-title"><span class="num"><img class="mod" src="assets/sprites/astro-point.png" alt=""></span><h2>${L('Карта базы', 'Base map')}</h2></div>
+        <p>${first ? L('Вот пять главных мест нашей базы. <b>Выбери, куда отправиться сначала</b> — компас покажет дорогу.', 'Here are the five main places of our base. <b>Choose where to go first</b> — the compass will show the way.') : L('Выбери место — компас покажет дорогу.', 'Choose a place — the compass will show the way.')}</p>
+        <div class="base-map"><canvas width="560" height="420"></canvas>
+          <div class="place-list">${places.map((pl, i) => `<button class="place" data-i="${i}"><span class="n">${i + 1}</span><img src="${pl.img}" alt=""><span><b>${pl.name}</b><em>${pl.desc}</em></span></button>`).join('')}</div>
+        </div>
+        ${first ? '' : `<div class="actions"><button class="btn ghost" data-close>${L('Закрыть', 'Close')}</button></div>`}`, m => {
+        world.drawBigMap(m.querySelector('canvas'));
+        const c = m.querySelector('[data-close]'); if (c) c.onclick = () => { sfx.click(); closeModal(); };
+        m.querySelectorAll('.place').forEach(b => b.onclick = () => {
+          sfx.ok();
+          const pl = places[+b.dataset.i];
+          world.goal = pl;
+          closeModal();
+          if (!S.started) { S.started = true; S.running = true; }
+          say(L(`Отличный выбор! Иди за стрелкой компаса вверху — она ведёт к месту «${pl.name}». Если что, кнопка «Карта» всегда рядом.`, `Great choice! Follow the compass arrow at the top — it leads to “${pl.name}”. The “Map” button is always there if you need it.`), 'good');
+        });
+      }, true);
+    }
+    // научные факты при первом посещении мест
+    const FACTS = {
+      habitat: [
+        [L('Это жилой модуль — наш дом на Марсе. Знаешь, почему он закрытый и прочный? Давление воздуха на Марсе в <b>100 раз меньше</b>, чем на Земле, а воздух почти весь из углекислого газа — дышать им нельзя!', 'This is the habitat — our home on Mars. Do you know why it’s sealed and strong? Air pressure on Mars is <b>100 times lower</b> than on Earth, and the air is almost all carbon dioxide — you can’t breathe it!'), 'point'],
+        [L('Здесь <b>радиостанция</b> для связи с Землёй, <b>склад запчастей</b> и <b>кровать</b>: когда закончишь дела, ложись спать — так закончится сол. Коридоры ведут в теплицу и энергоблок.', 'Here you’ll find the <b>radio</b> to talk to Earth, the <b>spare parts store</b> and the <b>bed</b>: when your tasks are done, go to sleep to end the sol. Corridors lead to the greenhouse and the power room.'), 'wave']
+      ],
+      power: [
+        [L('Это энергоблок. Марс в полтора раза дальше от Солнца, чем Земля, поэтому солнечного света здесь <b>почти вдвое меньше</b>. Каждый киловатт-час на счету!', 'This is the power room. Mars is one and a half times farther from the Sun than Earth, so sunlight here is <b>almost half as strong</b>. Every kilowatt-hour counts!'), 'point'],
+        [L('Ночью панели не работают, и станция живёт на батареях. Каждый вечер считай на пульте: <b>мощность × часы ночи</b> = сколько энергии нужно.', 'At night the panels don’t work and the station runs on batteries. Every evening work it out at the console: <b>power × night hours</b> = the energy needed.'), 'wave']
+      ],
+      panels: [
+        [L('Солнечные панели — наша электростанция. Марсианская пыль мелкая, как пудра, а пыльные бури бывают такими огромными, что <b>закрывают всю планету</b>!', 'The solar panels are our power plant. Martian dust is as fine as powder, and dust storms can be so huge that they <b>cover the whole planet</b>!'), 'point'],
+        [L('Запылённые панели можно промыть водой. Но вода нужна и растениям, а насосы съедают столько энергии, что в этот сол не будет связи с Землёй. Решать тебе!', 'Dusty panels can be washed with water. But the plants need water too, and the pumps use so much energy that there’s no contact with Earth that sol. Your call!'), 'alarm']
+      ],
+      ship: [
+        [L('Вот наш «Звёздный вихрь». Чтобы его починить, нужны инструкции с Земли. Радиосигнал до Земли идёт <b>от 4 до 24 минут</b>, поэтому ответ приходит не сразу.', 'Here’s our “Star Whirl”. To repair it we need instructions from Earth. A radio signal takes <b>4 to 24 minutes</b> to reach Earth, so replies don’t come at once.'), 'point'],
+        [L('Окно запуска к Земле откроется через 10 солов. Каждая инструкция — задача с расчётом. Ты справишься!', 'The launch window to Earth opens in 10 sols. Every instruction is a maths task. You can do it!'), 'wave']
+      ],
+      drill: [[L('Это ледяной бур. Под марсианским грунтом есть <b>лёд</b>! Бур растапливает его, и у нас появляется вода — 15 литров в сол. Но он тратит энергию.', 'This is the ice drill. There’s <b>ice</b> under the Martian ground! The drill melts it and gives us water — 15 litres per sol. But it uses energy.'), 'point']],
+      antenna: [[L('Эта антенна смотрит на Землю. С Марса наша планета видна как <b>яркая голубая звёздочка</b> на небе. Если антенна собьётся, связи не будет.', 'This antenna points at Earth. From Mars, our planet looks like a <b>bright blue star</b> in the sky. If the antenna gets knocked off course, there’s no contact.'), 'point']],
+      greenhouse: [
+        [L('Добро пожаловать в теплицу, астронавт! Здесь мы выращиваем еду для экипажа. Растениям нужны <b>вода, свет и правильная температура</b>.', 'Welcome to the greenhouse, astronaut! This is where we grow food for our crew. Plants need <b>water, light and the right temperature</b> to survive.'), 'wave'],
+        [L('А ты знаешь, что на Марсе очень холодно? Средняя температура на поверхности — около <b>−65 °C</b>! Растения в таком холоде не выживут. Поэтому теплица держит их в тепле.', 'Did you know that Mars is extremely cold? Its average surface temperature is about <b>−65 °C</b>! Plants cannot grow in these conditions. That’s why our greenhouse keeps them warm.'), 'point'],
+        [L('Давай проверим, всё ли работает! Подойди к трём индикаторам у входа — <b>термометру</b>, <b>датчику влажности</b> и <b>датчику света</b> — и проверь каждый.', 'Let’s check if everything is working properly! Walk up to the three indicators by the entrance — the <b>thermometer</b>, the <b>soil moisture meter</b> and the <b>light meter</b> — and check each one.'), 'point']
+      ]
+    };
+    function onZone(id) {
+      if (id === 'greenhouse' && S.ghTutorial === 0) { astroSeq(FACTS.greenhouse, () => { S.ghTutorial = 1; renderHud(); }, L('Проверим!', 'Let’s check!')); return; }
+      if (FACTS[id]) astroSeq(FACTS[id]);
+    }
+    // что делать дальше — кнопка «Спросить ASTRO»
+    function hint() {
+      const T = S.today;
+      if (S.day === DAYS && S.repair >= STEPS.length) return say(L('Окно запуска открыто! Беги к кораблю — летим домой!', 'The launch window is open! Run to the ship — we’re flying home!'), 'good');
+      if (!T.watered) {
+        if (S.ghTutorial < 2) return say(L('Начнём с теплицы: проверь три индикатора у входа.', 'Let’s start with the greenhouse: check the three indicators by the entrance.'));
+        if (!S.can.has) return say(L('Возьми лейку у входа в теплицу.', 'Take the watering can by the greenhouse entrance.'));
+        if (S.can.liters < 0.3) return say(L('Лейка пустая — наполни её у бака с водой.', 'The can is empty — fill it at the water tank.'));
+        return say(L('Полей каждую грядку: держи кнопку, пока шкала не станет <b>зелёной</b>.', 'Water each bed: hold the button until the bar turns <b>green</b>.'));
+      }
+      if (S.instructions > S.repair) return say(L('С Земли пришла инструкция — иди чинить корабль!', 'An instruction from Earth has arrived — go and repair the ship!'));
+      if (!T.called && !T.cleaning && !S.broken.antenna) return say(L('Свяжись с Землёй по радио в жилом модуле — без инструкций корабль не починить.', 'Contact Earth by radio in the habitat — we can’t fix the ship without instructions.'));
+      if (S.broken.antenna) return say(L('Антенна сбита — почини её, иначе связи с Землёй не будет.', 'The antenna is off course — fix it, or there’ll be no contact with Earth.'), 'alarm');
+      if (!T.energyPlanned) return say(L('Загляни в энергоблок и посчитай, сколько энергии нужно на ночь.', 'Visit the power room and work out how much energy the night needs.'));
+      return say(L('Все главные дела сделаны! Можешь лечь спать в жилом модуле.', 'All the main tasks are done! You can go to bed in the habitat.'), 'good');
+    }
+
+    /* ----- теплица: индикаторы, лейка, бак и полив ----- */
+    function indicatorUI(kind) {
+      const T = S.today;
+      const txt = {
+        temp: T.hot ? L('Термометр: в теплице <b>+28 °C</b> — сегодня жарко! Картофелю нужно на 1 литр больше воды. А снаружи около −65 °C.', 'Thermometer: <b>+28 °C</b> in the greenhouse — it’s hot today! Potatoes need 1 litre more water. Outside it’s about −65 °C.')
+                    : L('Термометр: в теплице <b>+22 °C</b>, а снаружи около <b>−65 °C</b>! Обогреватели и двойное стекло держат тепло. Температура в норме.', 'Thermometer: <b>+22 °C</b> in the greenhouse and about <b>−65 °C</b> outside! Heaters and double glass keep the warmth in. The temperature is fine.'),
+        water: L(`Датчик влажности почвы: на одну грядку нужно — <b>картофель ${cropNeed('potato')} л</b>, <b>томаты 2 л</b>, <b>салат 1 л</b>. Сейчас сухих грядок: <b>${BEDS.filter((c, i) => bedZone(i) === 'dry').length} из ${BEDS.length}</b>.`, `Soil moisture meter: each bed needs — <b>potatoes ${cropNeed('potato')} L</b>, <b>tomatoes 2 L</b>, <b>lettuce 1 L</b>. Dry beds now: <b>${BEDS.filter((c, i) => bedZone(i) === 'dry').length} of ${BEDS.length}</b>.`),
+        light: L(`Датчик света: лампы роста светят растениям <b>16 часов</b> в сол. Свет розовый, потому что растениям больше всего нужны <b>красные и синие лучи</b>. Ночью лампы ${S.lampsNight ? 'включены' : 'выключены'}.`, `Light meter: the grow lamps shine for <b>16 hours</b> per sol. The light is pink because plants need <b>red and blue light</b> the most. At night the lamps are ${S.lampsNight ? 'on' : 'off'}.`)
+      }[kind];
+      S.indicators[kind] = true;
+      const all = ['temp', 'water', 'light'].every(k => S.indicators[k]);
+      if (S.ghTutorial === 1 && all) {
+        S.ghTutorial = 2;
+        astroSeq([[txt, 'point'],
+          [L('Отлично! Теперь позаботимся о растениях.', 'Great! Now let’s take care of our plants.'), 'wave'],
+          [L('Растениям нужна вода, чтобы расти. Но осторожно! Мало воды — они засохнут, много воды — испортятся корни.', 'Plants need water to grow. But be careful! Too little water can make them dry, and too much water can damage their roots.'), 'alarm'],
+          [L('Возьми <b>лейку у входа</b>, наполни её у <b>бака с водой</b> и полей каждую грядку: держи кнопку, пока шкала влажности не станет <b>зелёной</b>. Красная — сухо, синяя — слишком много воды.', 'Take the <b>watering can by the entrance</b>, fill it at the <b>water tank</b> and water each bed: hold the button until the moisture bar is <b>green</b>. Red means too dry, blue means too much water.'), 'point']
+        ], () => renderHud(), L('Беру лейку!', 'Grab the can!'));
+      } else {
+        const left = ['temp', 'water', 'light'].filter(k => !S.indicators[k]).length;
+        say(txt + (S.ghTutorial === 1 ? L(` Осталось проверить: ${left}.`, ` Left to check: ${left}.`) : ''), 'point');
+      }
+      renderHud();
+    }
+    function canUI() {
+      if (S.ghTutorial < 2) { say(L('Сначала проверь три индикатора у входа — термометр, влажность и свет.', 'First check the three indicators by the entrance — temperature, moisture and light.')); return; }
+      S.can.has = true; sfx.ok();
+      say(L(`Лейка у тебя! В неё помещается ${CAN_CAP} литров. Теперь наполни её у бака с водой.`, `You’ve got the can! It holds ${CAN_CAP} litres. Now fill it at the water tank.`), 'good');
+      renderHud();
+    }
+    function tankUI() {
+      const T = S.today;
+      if (!S.can.has) { say(L('Сначала возьми лейку — она стоит у входа в теплицу.', 'First take the watering can — it’s by the greenhouse entrance.')); return; }
+      if (S.can.liters >= CAN_CAP - 0.05) { say(L('Лейка уже полная!', 'The can is already full!')); return; }
+      if (S.water < 0.5) { say(L('Вода в баке станции закончилась!', 'The station’s water tank is empty!'), 'alarm'); return; }
+      const fill = () => {
+        const add = Math.min(CAN_CAP - S.can.liters, S.water);
+        S.can.liters += add; S.water -= add; sfx.ok();
+        say(L(`Лейка наполнена: ${num(S.can.liters, 1)} л. В баке станции осталось ${Math.round(S.water)} л.`, `Can filled: ${num(S.can.liters, 1)} L. ${Math.round(S.water)} L left in the station tank.`), 'good');
+        if (S.water < 25) sayOnce('lowwater', L('Осторожно! Воды осталось мало — её нужно беречь на следующие дни.', 'Careful! Water is running low — we need to save it for the next days.'), 'alarm');
+        renderHud();
+      };
+      if (T.calcAsked) return fill();
+      T.calcAsked = true;
+      const total = waterNeed(Object.keys(CROPS));
+      let tries = 0;
+      const m = openModal(`
+        <div class="task-title"><span class="num"><img class="mod" src="assets/sprites/astro-point.png" alt=""></span><h2>${L('Сколько воды нужно?', 'How much water is needed?')}</h2></div>
+        <p>${L('ASTRO: «Прежде чем наливать, посчитаем, сколько воды нужно всем грядкам сегодня».', 'ASTRO: “Before we pour, let’s work out how much water all the beds need today.”')}</p>
+        <ul class="need-calc">${Object.entries(CROPS).map(([k, c]) => { const n = BEDS.filter(b => b === k).length; return `<li><b>${c.name}</b>: ${n} × ${cropNeed(k)} ${L('л', 'L')}</li>`; }).join('')}</ul>
+        ${T.hot ? `<p class="warn"><b>${L('Сегодня жарко: картофелю нужно на 1 литр больше!', 'It’s hot today: potatoes need 1 litre more!')}</b></p>` : ''}
+        <div class="calc"><span>${L('Всего:', 'Total:')}</span><input class="calc-input" inputmode="decimal" autocomplete="off"><span>${L('л', 'L')}</span><button class="btn orange calc-go">${L('Проверить', 'Check')}</button></div>
+        <div class="calc-fb"></div>`);
+      numberInput(m, total, () => {
+        const trips = Math.ceil(total / CAN_CAP);
+        m.querySelector('.calc-fb').innerHTML = `<div class="feedback ok">${L(`Верно, ${total} л! А лейка вмещает ${CAN_CAP} л — значит, наполнять её придётся ${trips} ${trips === 1 ? 'раз' : 'раза'}.`, `Correct, ${total} L! The can holds ${CAN_CAP} L, so you’ll need to fill it ${trips} time${trips === 1 ? '' : 's'}.`)}</div>`;
+        ctx.after(1800, () => { closeModal(); fill(); });
+      }, (v, fb) => {
+        tries++;
+        if (tries < 2) { fb.innerHTML = `<div class="feedback no">${L('Не так. Умножь число грядок на литры для каждой культуры и сложи.', 'Not quite. Multiply the number of beds by the litres for each crop and add up.')}</div>`; return; }
+        fb.innerHTML = `<div class="feedback no">${L(`Правильный ответ — <b>${total} л</b>. Ничего, в следующий раз получится!`, `The right answer is <b>${total} L</b>. Never mind, you’ll get it next time!`)}</div><div class="actions"><button class="btn orange" data-fill>${L('Наполнить лейку', 'Fill the can')}</button></div>`;
+        fb.querySelector('[data-fill]').onclick = () => { sfx.click(); closeModal(); fill(); };
+      });
+    }
+    function plotUI(i) {
+      if (!S.can.has) { say(L('Возьми лейку — она стоит у входа в теплицу.', 'Take the watering can — it’s by the greenhouse entrance.')); return; }
+      if (S.can.liters < 0.05) { say(L('Лейка пустая — наполни её у бака с водой.', 'The can is empty — fill it at the water tank.')); return; }
+    }
+    // вызывается из 3D-мира, пока игрок держит кнопку полива над грядкой
+    function pourCheck(i) {
+      const T = S.today, prev = T.bedZone[i], z = bedZone(i);
+      if (z === prev) return;
+      T.bedZone[i] = z;
+      if (z === 'ok') sfx.ok();
+      if (z === 'wet') { sfx.bad(); sayOnce('wet', L('Осторожно! Это уже слишком много воды — корни могут испортиться. Нам нужно беречь воду на следующие дни.', 'Careful! That’s too much water — the roots can be damaged. We need to save water for the next days.'), 'alarm'); }
+      if (!T.watered && T.bedZone.every(x => x === 'ok')) {
+        T.watered = true;
+        astroHide();
+        say(L('Отлично! Растениям хватает воды. Не забывай проверять почву каждый сол!', 'Excellent! Your plants have enough water. Remember to check the soil every day!'), 'good');
+      }
+      renderHud();
+    }
+    function canEmpty() { sayOnce('empty', L('Лейка пустая — наполни её у бака с водой.', 'The can is empty — fill it at the water tank.')); renderHud(); }
+
+    /* =================================================================
        ИГРА
        ================================================================= */
     function begin() {
       ctx.step(1);
       ctx.stage.classList.add('wide');
       newDay();
-      ctx.mc(L('Сол 1. Осмотрись: <b>жилой модуль</b> с радио и кроватью, <b>теплица</b> с картошкой, <b>энергоблок</b>, солнечные панели и ледяной бур. Дела на сол — в списке под картой.',
-               'Sol 1. Look around: the <b>habitat</b> with the radio and bed, the <b>greenhouse</b> with potatoes, the <b>power room</b>, solar panels and the ice drill. The sol’s tasks are in the list below.'));
       buildHud();
       world = makeWorld();
-      S.running = true;
+      world.onReady = () => world.flyIn(() => astroSeq(INTRO, () => mapUI(true), L('Я готов!', 'I’m ready!')));
       ctx.every(250, tickClock);
     }
 
     /* ---------- часы: сол длится ~4 минуты ---------- */
     const DAY_SECONDS = 240;
     function tickClock() {
-      if (!S.running || !world || world.paused || S.done) return;
+      if (!S.running || !world || world.paused || world.talk || S.done) return;
       S.time += 0.25 / DAY_SECONDS;
       const w = S.today.waitMsg;
       if (w && S.time >= w) { S.today.waitMsg = null; earthReply(); }
       if (S.day === DAYS && S.repair >= STEPS.length) S.time = Math.min(S.time, 0.97); // в день запуска ждём игрока
+      const T = S.today;
+      if (S.time > 0.55 && !T.watered) sayOnce('water', L('Растениям нужна вода! Проверь влажность почвы в теплице.', 'Your plants need water! Check the soil moisture in the greenhouse.'), 'alarm');
+      if (S.time > 0.4 && !T.energyPlanned && evening() < nightNeed()) sayOnce('bat', L('Внимание! Заряда батарей может не хватить на ночь. Загляни в энергоблок.', 'Warning! Your battery level is getting low. Check the power room.'), 'alarm');
+      if (S.time > 0.8) sayOnce('late', L('Скоро вечер! Закончи важные дела и ложись спать в жилом модуле.', 'Evening is coming! Finish the important tasks and go to bed in the habitat.'));
       if (S.time >= 1) { S.time = 1; endDay(L('Наступил вечер.', 'Evening has come.')); }
       renderClock();
     }
@@ -231,7 +433,7 @@ Game.register({
       hud.querySelector('.hud-res').innerHTML = res.map(([ic, n, v, p, low]) => `
         <div class="hr ${low && ic !== 'battery' ? 'low' : ''} ${ic === 'battery' && p < 0.25 ? 'low' : ''}">${icon(ic)}<div><span>${n}</span><b>${v}</b><i class="bar"><i style="width:${clamp(p, 0, 1) * 100}%"></i></i></div></div>`).join('');
       const T = S.today, tasks = [];
-      tasks.push([T.watered, L('Полить грядки (пульт в теплице)', 'Water the beds (greenhouse console)')]);
+      tasks.push([T.watered, S.ghTutorial < 2 ? L('Теплица: проверить индикаторы', 'Greenhouse: check the indicators') : L(`Полить все грядки (зелёных: ${T.bedZone.filter(z => z === 'ok').length} из ${BEDS.length})`, `Water all beds (green: ${T.bedZone.filter(z => z === 'ok').length} of ${BEDS.length})`)]);
       tasks.push([T.energyPlanned, L('Рассчитать энергию на ночь (энергоблок)', 'Work out the night energy (power room)')]);
       if (S.dust > 0) tasks.push([T.cleaned >= PANEL_N || T.decidedDust, L(`Пыль на панелях (−${Math.round(dustLeft() * 100)}%): мыть или нет?`, `Dust on panels (−${Math.round(dustLeft() * 100)}%): wash or not?`)]);
       tasks.push([T.called, T.cleaning ? L('Связь сегодня невозможна — работают насосы', 'No contact today — the pumps are running')
@@ -246,7 +448,10 @@ Game.register({
 
     function interact(id) {
       if (S.done) return;
-      if (id === 'garden') return gardenUI();
+      if (id === 'can') return canUI();
+      if (id === 'tank') return tankUI();
+      if (id.startsWith('ind-')) return indicatorUI(id.slice(4));
+      if (id.startsWith('plot')) return plotUI(+id.slice(4));
       if (id === 'power') return powerUI();
       if (id === 'radio') return radioUI();
       if (id === 'bed') return sleepUI();
@@ -254,50 +459,6 @@ Game.register({
       if (id === 'ship') return shipUI();
       if (id === 'drill' || id === 'antenna' || id === 'leak' || id === 'battery') return fixUI(id);
       if (id.startsWith('panel')) return cleanPanel(+id.slice(5));
-    }
-
-    /* ----- теплица: полив с расчётом ----- */
-    function gardenUI() {
-      const T = S.today;
-      if (T.watered) { sfx.click(); ctx.mc(L('Грядки сегодня уже политы. Растения довольны!', 'The beds are already watered today. The plants are happy!'), 'good'); return; }
-      const sel = { potato: true, tomato: true, lettuce: true };
-      const m = openModal(`
-        <div class="task-title"><span class="num">${icon('greenhouse')}</span><h2>${L('Полив теплицы', 'Watering the greenhouse')}</h2></div>
-        <p>${L('Каждой грядке нужно своё количество воды. Отметь, что польём, посчитай общий объём и введи его.', 'Each bed needs its own amount of water. Tick what to water, work out the total and enter it.')}${T.hot ? ` <b class="warn">${L('Сегодня жарко: картофелю нужно на 1 литр больше!', 'It’s hot today: potatoes need 1 litre more!')}</b>` : ''}</p>
-        <div class="crop-list">${Object.entries(CROPS).map(([k, c]) => {
-          const n = BEDS.filter(b => b === k).length;
-          const hp = Math.round(S.beds.filter(b => b.crop === k).reduce((a, b) => a + b.hp, 0) / n);
-          return `<label class="crop"><input type="checkbox" data-c="${k}" checked><span class="c-name">${c.name}</span><span class="c-need">${L(`${n} ${n === 1 ? 'грядка' : 'грядки'} × ${cropNeed(k)} л`, `${n} bed${n > 1 ? 's' : ''} × ${cropNeed(k)} L`)}</span><span class="c-hp">${L('здоровье', 'health')} ${hp}%<i class="bar"><i style="width:${hp}%"></i></i></span></label>`;
-        }).join('')}</div>
-        <div class="calc"><span>${L('Всего литров:', 'Total litres:')}</span><input class="calc-input" inputmode="decimal" autocomplete="off"><button class="btn orange calc-go">${L('Полить', 'Water')}</button></div>
-        <p class="small muted">${L(`Воды в запасе: <b>${Math.round(S.water)} л</b>. Если воды мало, можно полить не всё — но неполитые растения начнут вянуть.`, `Water in stock: <b>${Math.round(S.water)} L</b>. If water is short, you can skip some crops — but unwatered plants will wilt.`)}</p>
-        <div class="calc-fb"></div>
-        <div class="actions"><button class="btn ghost" data-close>${L('Отойти', 'Step away')}</button></div>`);
-      m.querySelector('[data-close]').onclick = () => { sfx.click(); closeModal(); };
-      m.querySelectorAll('[data-c]').forEach(cb => cb.onchange = () => { sel[cb.dataset.c] = cb.checked; sfx.click(); });
-      const fb = m.querySelector('.calc-fb'), go = m.querySelector('.calc-go'), inp = m.querySelector('.calc-input');
-      go.onclick = () => {
-        const crops = Object.keys(sel).filter(k => sel[k]);
-        const need = waterNeed(crops);
-        const v = parseNum(inp.value);
-        if (Number.isNaN(v)) { fb.innerHTML = `<div class="feedback no">${L('Введи число литров.', 'Enter the number of litres.')}</div>`; return; }
-        if (!crops.length) { fb.innerHTML = `<div class="feedback no">${L('Отметь хотя бы одну культуру.', 'Tick at least one crop.')}</div>`; return; }
-        if (v !== need) {
-          S.mistakes++; sfx.bad();
-          fb.innerHTML = `<div class="feedback no">${v < need ? L('Маловато — растения останутся без воды.', 'Too little — the plants will stay thirsty.') : L('Многовато — корни загниют, а вода пропадёт зря.', 'Too much — the roots will rot and water is wasted.')} ${L('Умножь число грядок на литры для каждой отмеченной культуры и сложи.', 'Multiply the number of beds by the litres for each ticked crop and add up.')}</div>`;
-          return;
-        }
-        if (need > S.water) { sfx.bad(); fb.innerHTML = `<div class="feedback no">${L(`Расчёт верный, но столько воды нет: в запасе ${Math.round(S.water)} л. Полей не всё.`, `The maths is right, but there isn’t that much water: ${Math.round(S.water)} L in stock. Skip some crops.`)}</div>`; return; }
-        S.calcOk++; sfx.ok();
-        S.water -= need;
-        S.beds.forEach(b => { b.hp = clamp(b.hp + (sel[b.crop] ? 12 : -20), 0, 100); });
-        T.watered = true;
-        world.plantsUpdate();
-        fb.innerHTML = `<div class="feedback ok">${L(`Точно! Полито ${need} л. Растения напились.`, `Exactly! ${need} L watered. The plants have had a drink.`)}</div>`;
-        ctx.after(1000, closeModal);
-      };
-      inp.addEventListener('keydown', e => { if (e.key === 'Enter') go.click(); });
-      setTimeout(() => inp.focus(), 50);
     }
 
     /* ----- энергоблок: расчёт энергии на ночь ----- */
@@ -364,7 +525,7 @@ Game.register({
         sfx.radio();
         T.called = true; T.energyPlanned = false;
         T.waitMsg = Math.min(0.95, S.time + 0.1);
-        ctx.mc(L('Сигнал отправлен. Пока он летит до Земли и обратно, займись делами. (Связь съела 3 кВт·ч — если ночь уже была рассчитана, пересчитай.)', 'Signal sent. While it travels to Earth and back, get on with your tasks. (The radio used 3 kWh — if you’d planned the night, check it again.)'));
+        say(L('Сигнал отправлен. Пока он летит до Земли и обратно, займись делами. (Связь съела 3 кВт·ч — если ночь уже была рассчитана, пересчитай.)', 'Signal sent. While it travels to Earth and back, get on with your tasks. (The radio used 3 kWh — if you’d planned the night, check it again.)'));
         closeModal();
       };
     }
@@ -380,17 +541,18 @@ Game.register({
       else if (next && next.hot) parts.push(L('<b>Прогноз:</b> завтра жарко, картофелю понадобится больше воды.', '<b>Forecast:</b> hot tomorrow, the potatoes will need more water.'));
       else if (next) parts.push(L('<b>Прогноз:</b> завтра спокойный сол.', '<b>Forecast:</b> a calm sol tomorrow.'));
       S.msgs.push(`${L('Сол', 'Sol')} ${S.day}: ${parts.join(' ')}`);
-      ctx.mc(L('<b>Пришёл ответ с Земли!</b> Прочитай его на радиостанции, потом иди чинить корабль.', '<b>A reply from Earth has arrived!</b> Read it at the radio station, then go and repair the ship.'), 'good');
+      ctx.mc(L('<b>Ответ для экипажа отправлен.</b> Новая инструкция уже на вашей радиостанции.', '<b>Reply sent to the crew.</b> The new instruction is on your radio station.'), 'good');
+      say(L('Пришёл ответ с Земли! Прочитай его на радиостанции, а потом иди чинить корабль.', 'A reply from Earth has arrived! Read it at the radio station, then go and repair the ship.'), 'good');
       renderHud();
     }
 
     /* ----- ремонт корабля по инструкции ----- */
     function shipUI() {
       if (S.day === DAYS && S.repair >= STEPS.length) return launchUI();
-      if (S.repair >= STEPS.length) { ctx.mc(L(`Корабль полностью починен! Окно запуска откроется на ${DAYS}-й сол — продержись до него.`, `The ship is fully repaired! The launch window opens on sol ${DAYS} — hold out until then.`), 'good'); return; }
-      if (S.instructions <= S.repair) { sfx.bad(); ctx.mc(L('Без инструкции с Земли непонятно, что чинить дальше. Свяжись с Землёй по радио.', 'Without Earth’s instruction it’s unclear what to fix next. Contact Earth by radio.'), 'bad'); return; }
+      if (S.repair >= STEPS.length) { say(L(`Корабль полностью починен! Окно запуска откроется на ${DAYS}-й сол — продержись до него.`, `The ship is fully repaired! The launch window opens on sol ${DAYS} — hold out until then.`), 'good'); return; }
+      if (S.instructions <= S.repair) { sfx.bad(); say(L('Без инструкции с Земли непонятно, что чинить дальше. Свяжись с Землёй по радио.', 'Without Earth’s instruction it’s unclear what to fix next. Contact Earth by radio.'), 'bad'); return; }
       const st = STEPS[S.repair];
-      if (st.part && S.parts < 1) { sfx.bad(); ctx.mc(L('Для этого шага нужна запчасть, а склад пуст!', 'This step needs a spare part, but the store is empty!'), 'bad'); return; }
+      if (st.part && S.parts < 1) { sfx.bad(); say(L('Для этого шага нужна запчасть, а склад пуст!', 'This step needs a spare part, but the store is empty!'), 'bad'); return; }
       const m = openModal(`
         <div class="task-title"><span class="num">${S.repair + 1}</span><h2>${L('Ремонт', 'Repair')}: ${st.title}</h2></div>
         <div class="screen log-text">${st.text}</div>
@@ -407,8 +569,8 @@ Game.register({
         S.repair++;
         world.shipUpdate();
         fb.innerHTML = `<div class="feedback ok">${L(`Готово! Ремонт корабля: ${S.repair} из ${STEPS.length}.`, `Done! Ship repair: ${S.repair} of ${STEPS.length}.`)}</div>`;
-        ctx.mc(S.repair >= STEPS.length ? L(`Корабль починен! Взлетаем на ${DAYS}-й сол, когда откроется окно запуска.`, `The ship is repaired! We lift off on sol ${DAYS}, when the launch window opens.`)
-                                        : L('Отличная работа! Следующую инструкцию пришлёт Земля.', 'Great work! Earth will send the next instruction.'), 'good');
+        say(S.repair >= STEPS.length ? L(`Отлично! Корабль полностью починен! Взлетаем на ${DAYS}-й сол, когда откроется окно запуска.`, `The ship is repaired! We lift off on sol ${DAYS}, when the launch window opens.`)
+                                        : L('Отлично! Система снова работает! Следующую инструкцию пришлёт Земля.', 'Great job! The system is working again! Earth will send the next instruction.'), 'good');
         ctx.after(1200, closeModal);
       };
       const wrong = b => { fb.innerHTML = `<div class="feedback no">${L('Не так.', 'Not quite.')} ${st.hint}</div>`; if (b) { b.classList.remove('wrong'); void b.offsetWidth; b.classList.add('wrong'); } };
@@ -432,7 +594,7 @@ Game.register({
 
     /* ----- поломки ----- */
     function fixUI(key) {
-      if (!S.broken[key]) { sfx.click(); ctx.mc(L('Здесь всё работает исправно.', 'Everything works fine here.'), 'good'); return; }
+      if (!S.broken[key]) { sfx.click(); say(L('Здесь всё работает исправно.', 'Everything works fine here.'), 'good'); return; }
       const b = BREAK[key], need = STEPS.slice(S.repair).filter(s => s.part).length;
       openModal(`
         <div class="task-title"><span class="num">!</span><h2>${b.name}</h2></div>
@@ -444,7 +606,7 @@ Game.register({
         const f = m.querySelector('[data-fix]');
         if (f) f.onclick = () => {
           S.parts--; delete S.broken[key]; sfx.ok();
-          ctx.mc(L(`Починено: ${b.name.toLowerCase()}.`, `Fixed: ${b.name.toLowerCase()}.`), 'good');
+          say(L(`Отлично! Система снова работает! Починено: ${b.name.toLowerCase()}.`, `Great job! The system is working again! Fixed: ${b.name.toLowerCase()}.`), 'good');
           closeModal();
         };
       });
@@ -453,10 +615,10 @@ Game.register({
     /* ----- промывка панелей ----- */
     function cleanPanel(i) {
       const T = S.today;
-      if (!S.dust) { ctx.mc(L('Панели чистые, промывать не нужно.', 'The panels are clean, no washing needed.')); return; }
-      if (world.panelClean(i)) { ctx.mc(L('Эта панель уже чистая.', 'This panel is already clean.')); return; }
+      if (!S.dust) { say(L('Панели чистые, промывать не нужно.', 'The panels are clean, no washing needed.')); return; }
+      if (world.panelClean(i)) { say(L('Эта панель уже чистая.', 'This panel is already clean.')); return; }
       if (!T.cleaning) {
-        if (T.called) { sfx.bad(); ctx.mc(L('Сегодня уже была связь с Землёй — на насосы не хватит энергии. Промыть можно завтра.', 'You already contacted Earth today — not enough energy for the pumps. You can wash tomorrow.'), 'bad'); return; }
+        if (T.called) { sfx.bad(); say(L('Сегодня уже была связь с Землёй — на насосы не хватит энергии. Промыть можно завтра.', 'You already contacted Earth today — not enough energy for the pumps. You can wash tomorrow.'), 'bad'); return; }
         openModal(`
           <div class="task-title"><span class="num">${icon('solar')}</span><h2>${L('Промыть панели?', 'Wash the panels?')}</h2></div>
           <p>${L(`Пыль отнимает <b>${Math.round(S.dust * 100)}%</b> энергии панелей: сегодня они дадут ${production()} кВт·ч вместо ${PANEL_N * PANEL_KWH}. Промывка одной панели — <b>2 литра</b> воды, а всего панелей ${PANEL_N}.`, `Dust steals <b>${Math.round(S.dust * 100)}%</b> of the panels’ energy: today they’ll give ${production()} kWh instead of ${PANEL_N * PANEL_KWH}. Washing one panel takes <b>2 litres</b> of water, and there are ${PANEL_N} panels.`)}</p>
@@ -464,14 +626,14 @@ Game.register({
           <p>${L(`Воды сейчас: <b>${Math.round(S.water)} л</b>. Грядкам сегодня нужно ${waterNeed(Object.keys(CROPS))} л.`, `Water now: <b>${Math.round(S.water)} L</b>. The beds need ${waterNeed(Object.keys(CROPS))} L today.`)}</p>
           <div class="actions"><button class="btn orange" data-yes>${L('Включить насосы и мыть', 'Start the pumps and wash')}</button><button class="btn ghost" data-no>${L('Не мыть — беречь воду и связь', 'Don’t wash — save water and contact')}</button></div>`, m => {
           m.querySelector('[data-yes]').onclick = () => { sfx.click(); T.cleaning = true; T.energyPlanned = false; closeModal(); cleanPanel(i); };
-          m.querySelector('[data-no]').onclick = () => { sfx.click(); T.decidedDust = true; closeModal(); ctx.mc(L('Решили не мыть панели. Энергии будет меньше — продумай ночь.', 'Decided not to wash the panels. There’ll be less energy — plan the night carefully.')); };
+          m.querySelector('[data-no]').onclick = () => { sfx.click(); T.decidedDust = true; closeModal(); say(L('Решили не мыть панели. Энергии будет меньше — продумай ночь.', 'Decided not to wash the panels. There’ll be less energy — plan the night carefully.')); };
         });
         return;
       }
-      if (S.water < 2) { sfx.bad(); ctx.mc(L('Вода закончилась — мыть нечем!', 'Out of water — nothing to wash with!'), 'bad'); return; }
+      if (S.water < 2) { sfx.bad(); say(L('Вода закончилась — мыть нечем!', 'Out of water — nothing to wash with!'), 'bad'); return; }
       S.water -= 2; T.cleaned++; sfx.ok();
       world.panelSet(i, true);
-      ctx.mc(T.cleaned >= PANEL_N ? L('Все панели чистые! Энергии сегодня будет больше. Не забудь пересчитать ночь.', 'All panels are clean! More energy today. Don’t forget to re-plan the night.')
+      say(T.cleaned >= PANEL_N ? L('Все панели чистые! Энергии сегодня будет больше. Не забудь пересчитать ночь.', 'All panels are clean! More energy today. Don’t forget to re-plan the night.')
                                   : L(`Панель промыта (${T.cleaned} из ${PANEL_N}). Потрачено ${T.cleaned * 2} л воды.`, `Panel washed (${T.cleaned} of ${PANEL_N}). ${T.cleaned * 2} L of water used.`), 'good');
       if (T.cleaned >= PANEL_N) T.decidedDust = true;
       renderHud();
@@ -481,7 +643,7 @@ Game.register({
        КОНЕЦ СОЛА: ночь, итоги, последствия
        ================================================================= */
     function sleepUI() {
-      if (S.day === DAYS && S.repair >= STEPS.length) { ctx.mc(L('Сегодня не время спать — окно запуска открыто! Иди к кораблю.', 'No time to sleep today — the launch window is open! Go to the ship.'), 'alarm'); return; }
+      if (S.day === DAYS && S.repair >= STEPS.length) { say(L('Сегодня не время спать — окно запуска открыто! Иди к кораблю.', 'No time to sleep today — the launch window is open! Go to the ship.'), 'alarm'); return; }
       const T = S.today, miss = [];
       if (!T.watered) miss.push(L('грядки не политы', 'beds not watered'));
       if (!T.energyPlanned) miss.push(L('энергия на ночь не рассчитана', 'night energy not worked out'));
@@ -506,7 +668,16 @@ Game.register({
       if (drillOn()) { S.water += 15; lines.push(L('Ледяной бур добыл 15 л воды.', 'The ice drill mined 15 L of water.')); }
       if (S.broken.leak) { S.water -= 8; lines.push(L('Протечка в теплице: потеряно 8 л воды.', 'Greenhouse leak: 8 L of water lost.')); }
       S.water -= 3;
-      if (!T.watered) { S.beds.forEach(b => { b.hp = clamp(b.hp - 25, 0, 100); }); lines.push(L('Грядки не политы — растения вянут.', 'Beds not watered — the plants are wilting.')); }
+      let dry = 0, wet = 0;
+      S.beds.forEach((b, i) => {
+        const z = bedZone(i);
+        if (z === 'ok') b.hp = clamp(b.hp + 12, 0, 100);
+        else if (z === 'dry') { dry++; b.hp = clamp(b.hp - (T.bedWater[i] > 0 ? 12 : 25), 0, 100); }
+        else { wet++; b.hp = clamp(b.hp - 10, 0, 100); }
+      });
+      if (!dry && !wet) lines.push(L('Все грядки политы как надо — растения подросли.', 'All beds were watered just right — the plants have grown.'));
+      if (dry) lines.push(L(`Сухих грядок: ${dry} — растения вянут.`, `Dry beds: ${dry} — the plants are wilting.`));
+      if (wet) lines.push(L(`Перелитых грядок: ${wet} — у растений болят корни.`, `Over-watered beds: ${wet} — the roots are suffering.`));
       if (!S.lampsNight) S.beds.forEach(b => { b.hp = clamp(b.hp - 5, 0, 100); });
       if (!S.heaterNight && T.heat > 1) S.beds.forEach(b => { b.hp = clamp(b.hp - 10, 0, 100); });
       const need = nightNeed();
@@ -564,7 +735,11 @@ Game.register({
           if (p.brk) news.push(L(`<b>Поломка:</b> ${BREAK[p.brk].name.toLowerCase()}!`, `<b>Breakdown:</b> ${BREAK[p.brk].name.toLowerCase()}!`));
           if (p.harvest) news.push(L('Вечером — сбор урожая!', 'Harvest this evening!'));
           if (S.day === DAYS) news.push(S.repair >= STEPS.length ? L('<b>Окно запуска открыто!</b> Иди к кораблю.', '<b>The launch window is open!</b> Go to the ship.') : L('<b>Последний сол!</b> Окно запуска открыто — успей закончить ремонт.', '<b>Last sol!</b> The launch window is open — finish the repair in time.'));
-          ctx.mc(`${L('Сол', 'Sol')} ${S.day}. ${news.join(' ') || L('Новый день на Марсе.', 'A new day on Mars.')}`, p.brk || p.dust ? 'alarm' : 'info');
+          if (S.battery < cap() * 0.3) news.push(L('<b>Внимание! Заряд батарей низкий.</b> Береги энергию.', '<b>Warning! Your battery level is getting low.</b> Save energy.'));
+          if (S.water < 30) news.push(L('<b>Осторожно! Воды мало</b> — нужно беречь её на следующие дни.', '<b>Careful! Water is low</b> — we need to save it for the next days.'));
+          news.push(L('Не забудь полить грядки!', 'Don’t forget to water the beds!'));
+          const bad = p.brk || p.dust || S.battery < cap() * 0.3 || S.water < 30;
+          astroSeq([[`${L('Доброе утро! Сол', 'Good morning! Sol')} ${S.day}. ${news.join(' ')}`, bad ? 'alarm' : 'wave']], null, L('Вперёд!', 'Let’s go!'));
           S.running = true; renderHud();
         };
       });
@@ -606,7 +781,8 @@ Game.register({
        ================================================================= */
     function makeWorld() {
       const touch = Game.isTouch;
-      const self = { paused: false, stop, refresh() {}, plantsUpdate() {}, shipUpdate() {}, morning() {}, panelClean() { return false; }, panelSet() {} };
+      const self = { paused: false, talk: false, goal: null, places: [], stop, refresh() {}, plantsUpdate() {}, shipUpdate() {}, morning() {}, panelClean() { return false; }, panelSet() {},
+        astroShow() {}, astroHide() {}, flyIn(done) { done(); }, drawBigMap() {}, onReady: null };
       let running = true, renderer = null, onResize = null;
       const el = h(`
         <div class="fp ${touch ? 'is-touch' : ''}">
@@ -617,6 +793,9 @@ Game.register({
             <canvas class="fp-map" width="120" height="120"></canvas>
             <div class="fp-prompt" hidden></div>
             <div class="fp-cross"></div>
+            <div class="fp-tools"><button class="btn small ghost" data-map>${L('Карта', 'Map')}</button><button class="btn small ghost" data-help>${L('Спросить ASTRO', 'Ask ASTRO')}</button></div>
+            <div class="fp-can" hidden><span>${L('Лейка', 'Can')}</span><b></b><i class="bar"><i></i></i></div>
+            <div class="astro-box" hidden><img class="astro-img" src="assets/sprites/astro-wave.png" alt="ASTRO"><div class="astro-body"><b class="astro-name">ASTRO</b><p class="astro-text"></p><div class="astro-btns"></div></div></div>
           </div>
           ${touch ? `<div class="pad panel flat">
             <div class="joy" aria-label="${L('Джойстик', 'Joystick')}"><div class="joy-base"><div class="joy-knob"></div></div></div>
@@ -629,6 +808,10 @@ Game.register({
       const mapCv = el.querySelector('.fp-map'), mg = mapCv.getContext('2d');
       const promptEl = el.querySelector('.fp-prompt');
       const arrowEl = el.querySelector('.fp-compass .arrow'), distEl = el.querySelector('.fp-compass .dist');
+      astroBox = el.querySelector('.astro-box');
+      const canEl = el.querySelector('.fp-can');
+      el.querySelector('[data-map]').onclick = () => { sfx.click(); if (S.started && !self.talk) mapUI(false); };
+      el.querySelector('[data-help]').onclick = () => { sfx.click(); if (S.started && !self.talk) hint(); };
 
       function stop() {
         running = false;
@@ -664,7 +847,7 @@ Game.register({
         const SHIP = { x: 6, z: 24 }, DRILL = { x: -22, z: 13 }, ANT = { x: -9, z: 21 };
         // точки пультов в мировых координатах
         const POS = {
-          garden: { x: GH.x + 4.2, z: GH.z - 3.4 }, power: { x: PW.x, z: PW.z - 3.4 }, radio: { x: 3.0, z: -2.6 },
+          garden: { x: GH.x + 4.4, z: GH.z + 2.6 }, tank: { x: GH.x + 3.0, z: GH.z + 4.4 }, power: { x: PW.x, z: PW.z - 3.4 }, radio: { x: 3.0, z: -2.6 },
           bed: { x: -3.1, z: -2.2 }, storage: { x: -2.8, z: 2.6 }, leak: { x: GH.x - 5.4, z: GH.z }, battery: { x: PW.x + 2.8, z: PW.z }
         };
         const PANELS = [];
@@ -696,7 +879,10 @@ Game.register({
         onResize();
         const manager = new THREE.LoadingManager();
         manager.onProgress = (u, d, t) => { loadBar.style.width = Math.round(d / t * 100) + '%'; };
-        manager.onLoad = () => { loadingEl.hidden = true; };
+        let readyFired = false;
+        const fireReady = () => { if (readyFired) return; readyFired = true; loadingEl.hidden = true; if (self.onReady) self.onReady(); };
+        manager.onLoad = fireReady;
+        ctx.after(8000, fireReady);
         manager.onError = () => {};
         const loader = new THREE.TextureLoader(manager);
         const tex = (file, rx = 1, ry = 1) => {
@@ -1053,17 +1239,82 @@ Game.register({
           const glow = new THREE.Mesh(new THREE.BoxGeometry(8.0, 0.04, 0.3), new THREE.MeshBasicMaterial({ color: 0xff8ae0 })); glow.position.set(-1.0, 3.21, z); ghG.add(glow);
           [-4.5, 2.5].forEach(x => { const w = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 2.2, 4), dark); w.position.set(x, 4.4, z); ghG.add(w); });
         });
-        // бочка с водой и шланг
-        const barrel = add(new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 1.2, 20), toon(0x6fc8ff)), ghG, 0.04); barrel.position.set(2.0, 0.6, -4.6);
-        const hose = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(2.0, 1.1, -4.6), new THREE.Vector3(2.6, 0.2, -3.6), new THREE.Vector3(3.6, 0.1, -3.9), new THREE.Vector3(4.0, 0.9, -3.4)]), 20, 0.05, 6), toon(0x7ee0a0));
-        ghG.add(hose);
-        const gardenScr = consoleDesk(ghG, POS.garden.x - GH.x, POS.garden.z - GH.z, 0, (g, W, H) => {
-          scr(g, W, H, L('ПОЛИВ', 'WATERING'));
-          const avg = S.beds.reduce((a, b) => a + b.hp, 0) / S.beds.length;
-          g.fillStyle = '#e8f6ff'; g.fillText(L(`здоровье ${Math.round(avg)}%`, `health ${Math.round(avg)}%`), 30, 130);
-          meter(g, 30, 150, W - 60, avg / 100, avg > 50 ? '#7ee0a0' : '#ff6b8a');
-          g.fillStyle = S.today && S.today.watered ? '#7ee0a0' : '#ffd166';
-          g.fillText(S.today && S.today.watered ? L('полито ✓', 'watered ✓') : L('нужно полить!', 'needs water!'), 30, 230);
+        // бак с водой (из него наполняют лейку)
+        const tankG = new THREE.Group(); tankG.position.set(POS.tank.x - GH.x, 0, POS.tank.z - GH.z); ghG.add(tankG);
+        add(new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 1.3, 24), toon(0x6fc8ff)), tankG, 0.04).position.y = 0.65;
+        add(new THREE.Mesh(new THREE.CylinderGeometry(0.64, 0.64, 0.12, 24), white), tankG, 0.03).position.y = 1.32;
+        const tap = add(new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.4, 10), steel), tankG, 0.02); tap.rotation.x = Math.PI / 2; tap.position.set(0, 0.5, -0.75);
+        const tapK = add(new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 10), orange), tankG, 0.02); tapK.position.set(0, 0.62, -0.62);
+        const dropT = canvasTex(128, 128, g => { g.fillStyle = '#ffffff'; g.beginPath(); g.moveTo(64, 14); g.bezierCurveTo(104, 64, 108, 112, 64, 114); g.bezierCurveTo(20, 112, 24, 64, 64, 14); g.fill(); g.fillStyle = '#5fd8ff'; g.beginPath(); g.moveTo(64, 30); g.bezierCurveTo(94, 70, 96, 102, 64, 104); g.bezierCurveTo(32, 102, 34, 70, 64, 30); g.fill(); });
+        const dropS = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.6), new THREE.MeshBasicMaterial({ map: dropT, transparent: true })); dropS.position.set(0, 0.75, -0.62); dropS.rotation.y = Math.PI; tankG.add(dropS);
+        // лейка: одна модель для подставки и для руки
+        function makeCan() {
+          const g = new THREE.Group();
+          add(new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.19, 0.28, 20), toon(0x7ee0a0)), g, 0.015).position.y = 0.14;
+          const sp = add(new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.04, 0.38, 10), toon(0x7ee0a0)), g, 0.01); sp.position.set(0.24, 0.24, 0); sp.rotation.z = -0.95;
+          const rose = add(new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.035, 0.05, 12), orange), g, 0.01); rose.position.set(0.39, 0.35, 0); rose.rotation.z = -0.95;
+          const hd = add(new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.025, 8, 20, Math.PI), orange), g, 0.01); hd.position.set(-0.02, 0.3, 0);
+          return g;
+        }
+        const standG = new THREE.Group(); standG.position.set(POS.garden.x - GH.x, 0, POS.garden.z - GH.z); ghG.add(standG);
+        add(new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.38, 0.7, 16), lav), standG, 0.03).position.y = 0.35;
+        const standCan = makeCan(); standCan.position.y = 0.7; standCan.rotation.y = 2.2; standG.add(standCan);
+        // индикаторы: термометр, влажность почвы, свет
+        const IND = [
+          { k: 'temp', x: 4.6, z: -2.4, col: '#ff5d6c', name: L('Термометр', 'Thermometer') },
+          { k: 'water', x: 3.6, z: -3.5, col: '#5fd8ff', name: L('Влажность почвы', 'Soil moisture') },
+          { k: 'light', x: 2.4, z: -4.3, col: '#ffd166', name: L('Датчик света', 'Light meter') }
+        ];
+        IND.forEach(ind => {
+          const g = new THREE.Group(); g.position.set(ind.x, 0, ind.z); g.rotation.y = Math.atan2(-ind.x, -ind.z) + Math.PI; ghG.add(g);
+          add(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 1.3, 10), steel), g, 0.02).position.y = 0.65;
+          const face = add(new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.1, 28), white), g, 0.03); face.rotation.x = Math.PI / 2; face.position.y = 1.55;
+          ind.scr = screenMesh(0.7, 0.7, (gg, W, H) => {
+            gg.fillStyle = '#1b2584'; gg.beginPath(); gg.arc(W / 2, H / 2, W / 2, 0, 7); gg.fill();
+            gg.lineWidth = 18; gg.strokeStyle = ind.col; gg.beginPath(); gg.arc(W / 2, H / 2, W / 2 - 14, 0, 7); gg.stroke();
+            gg.fillStyle = ind.col; gg.textAlign = 'center'; gg.textBaseline = 'middle';
+            const T = S.today || { bedZone: [] };
+            if (ind.k === 'temp') {
+              gg.fillRect(W / 2 - 22, 120, 44, 190); gg.beginPath(); gg.arc(W / 2, 330, 48, 0, 7); gg.fill();
+              gg.fillStyle = '#fff'; gg.font = '900 92px Nunito, sans-serif'; gg.fillText(T.hot ? '+28°' : '+22°', W / 2, 440);
+            } else if (ind.k === 'water') {
+              gg.beginPath(); gg.moveTo(W / 2, 90); gg.bezierCurveTo(W / 2 + 110, 230, W / 2 + 100, 330, W / 2, 330); gg.bezierCurveTo(W / 2 - 100, 330, W / 2 - 110, 230, W / 2, 90); gg.fill();
+              const ok = (T.bedZone || []).filter(z => z === 'ok').length;
+              gg.fillStyle = '#fff'; gg.font = '900 80px Nunito, sans-serif'; gg.fillText(`${ok}/${BEDS.length}`, W / 2, 430);
+            } else {
+              gg.beginPath(); gg.arc(W / 2, 220, 80, 0, 7); gg.fill();
+              for (let r = 0; r < 8; r++) { const a = r / 8 * Math.PI * 2; gg.fillRect(W / 2 + Math.cos(a) * 110 - 12, 220 + Math.sin(a) * 110 - 12, 24, 24); }
+              gg.fillStyle = '#fff'; gg.font = '900 80px Nunito, sans-serif'; gg.fillText(L('16 ч', '16 h'), W / 2, 430);
+            }
+          });
+          ind.scr.mesh.position.set(0, 1.55, 0.06); g.add(ind.scr.mesh);
+          ind.pos = { x: GH.x + ind.x, z: GH.z + ind.z };
+          obstacles.push({ x: ind.pos.x, z: ind.pos.z, r: 0.3 });
+        });
+        // шкала влажности над каждой грядкой: красная — сухо, зелёная — норма, синяя — много воды
+        const plotPos = [], bars = [];
+        BEDS.forEach((crop, i) => {
+          const col = i % 3, row = Math.floor(i / 3), lx = -3.8 + col * 2.8, lz = row === 0 ? -1.9 : 1.9;
+          plotPos.push({ x: GH.x + lx, z: GH.z + lz });
+          const c = document.createElement('canvas'); c.width = 320; c.height = 110;
+          const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace;
+          const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tx, transparent: true, depthWrite: false }));
+          sp.scale.set(1.6, 0.55, 1); sp.position.set(lx, 1.75, lz); ghG.add(sp);
+          const draw = () => {
+            const g = c.getContext('2d'), T = S.today, n = bedNeed(i), m = T ? T.bedWater[i] : 0, max = Math.max(2, n * 2);
+            g.clearRect(0, 0, 320, 110);
+            g.fillStyle = 'rgba(27,37,132,0.88)'; g.beginPath(); g.roundRect ? g.roundRect(4, 4, 312, 102, 18) : g.rect(4, 4, 312, 102); g.fill();
+            g.fillStyle = '#fff'; g.font = '900 26px Nunito, sans-serif'; g.textAlign = 'left'; g.fillText(CROPS[crop].name, 16, 36);
+            g.textAlign = 'right'; g.fillText(`${num(m, 1)} / ${n} ${L('л', 'L')}`, 304, 36);
+            const x0 = 16, w = 288, y0 = 52, hh = 34, X = v => x0 + w * Math.min(1, v / max);
+            g.fillStyle = '#ff6b8a'; g.fillRect(x0, y0, X(n - TOL) - x0, hh);
+            g.fillStyle = '#7ee0a0'; g.fillRect(X(n - TOL), y0, X(n + TOL) - X(n - TOL), hh);
+            g.fillStyle = '#6fa8ff'; g.fillRect(X(n + TOL), y0, x0 + w - X(n + TOL), hh);
+            g.lineWidth = 4; g.strokeStyle = '#fff'; g.strokeRect(x0, y0, w, hh);
+            const mx = X(m); g.fillStyle = '#fff'; g.fillRect(mx - 5, y0 - 8, 10, hh + 16); g.strokeStyle = '#2b2a6b'; g.lineWidth = 3; g.strokeRect(mx - 5, y0 - 8, 10, hh + 16);
+            tx.needsUpdate = true;
+          };
+          bars.push(draw); draw();
         });
         const leakMark = new THREE.Group(); leakMark.position.set(POS.leak.x - GH.x, 0, 0); ghG.add(leakMark);
         { const pipe = add(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 2.4, 10), steel), leakMark, 0.02); pipe.position.y = 1.2;
@@ -1202,11 +1453,39 @@ Game.register({
           leak: marker(POS.leak.x, 3.0, POS.leak.z), battery: marker(POS.battery.x - 0.5, 3.8, POS.battery.z), bed: marker(POS.bed.x, 2.4, POS.bed.z)
         };
 
+        /* ---------- лейка в руке (видна от первого лица) ---------- */
+        scene.add(camera);
+        const handCan = makeCan(); handCan.scale.setScalar(0.8); handCan.position.set(0.5, -0.52, -0.95); handCan.rotation.set(0, -0.5, 0); camera.add(handCan);
+        const drops = [];
+        for (let k = 0; k < 7; k++) { const d = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 6), new THREE.MeshBasicMaterial({ color: 0x5fd8ff })); d.visible = false; handCan.add(d); drops.push({ d, t: k / 7 }); }
+        let pourAmt = 0;
+
+        /* ---------- ASTRO в 3D: белый робот с голубым визором ---------- */
+        const astro = new THREE.Group(), aBody = new THREE.Group(); astro.add(aBody); scene.add(astro); aBody.scale.setScalar(1.2);
+        {
+          // детальная модель — в js/astro3d.js
+          const AM = window.AstroModel.build(THREE, { toon, add });
+          aBody.add(AM.root);
+          astro.userData.armL = AM.armL; astro.userData.armR = AM.armR; astro.userData.jet = AM.jet; astro.userData.eyes = AM.eyes;
+        }
+        const A_STAND = { x: 0, z: 11.5 };
+        astro.position.set(A_STAND.x, 0.2, A_STAND.z);
+        let astroMode = 'stand', astroPose = 'wave', astroVis = 1, astroWant = 1;
+        self.astroShow = pose => { astroPose = pose; astroWant = 1; };
+        self.astroHide = () => { if (astroMode === 'follow') astroWant = 0; };
+
         /* ---------- игрок и интерактивные точки ---------- */
         const P = { x: SHIP.x - 5, z: SHIP.z - 5, yaw: 0, pitch: -0.05 };
         P.yaw = Math.atan2(-(0 - P.x), -(7 - P.z));
         const SPOTS = [
-          { id: 'garden', ...POS.garden, r: 2.6, label: L('Пульт полива', 'Watering console') },
+          { id: 'can', ...POS.garden, r: 2.0, label: L('Лейка: взять', 'Watering can: take it'), only: () => !S.can.has },
+          { id: 'tank', ...POS.tank, r: 2.2, label: () => L(`Бак с водой: наполнить лейку (в запасе ${Math.round(S.water)} л)`, `Water tank: fill the can (${Math.round(S.water)} L in stock)`) },
+          ...IND.map(ind => ({ id: 'ind-' + ind.k, ...ind.pos, r: 1.9, label: L(`${ind.name}: проверить`, `${ind.name}: check`) })),
+          ...plotPos.map((pp, i) => ({ id: 'plot' + i, ...pp, r: 2.0, plot: i, label: () => {
+            const m = S.today.bedWater[i], n = bedNeed(i);
+            const act = touch ? L('держи «Действие»', 'hold “Action”') : L('держи E', 'hold E');
+            return S.can.has && S.can.liters > 0.05 ? `${CROPS[BEDS[i]].name}: ${num(m, 1)} / ${n} ${L('л', 'L')} — ${act}` : `${CROPS[BEDS[i]].name}: ${num(m, 1)} / ${n} ${L('л', 'L')}`;
+          } })),
           { id: 'power', ...POS.power, r: 2.6, label: L('Пульт энергоблока', 'Power console') },
           { id: 'radio', ...POS.radio, r: 2.6, label: L('Радиостанция', 'Radio station') },
           { id: 'bed', ...POS.bed, r: 2.4, label: L('Кровать: закончить сол', 'Bed: end the sol') },
@@ -1219,9 +1498,10 @@ Game.register({
           ...PANELS.map((p, i) => ({ id: 'panel' + i, x: p.x, z: p.z, r: 2.6, label: L('Солнечная панель: промыть', 'Solar panel: wash'), only: () => S.dust > 0 && !p.clean }))
         ];
         obstacles.push({ ...POS.bed, r: 1.0 }, { ...POS.storage, r: 0.9 }, { x: 2.2, z: 1.6, r: 0.8 });
-        [POS.radio, POS.garden, POS.power].forEach(p => obstacles.push({ x: p.x - 0.6, z: p.z, r: 0.65 }, { x: p.x + 0.6, z: p.z, r: 0.65 }));
+        obstacles.push({ ...POS.garden, r: 0.4 });
+        [POS.radio, POS.power].forEach(p => obstacles.push({ x: p.x - 0.6, z: p.z, r: 0.65 }, { x: p.x + 0.6, z: p.z, r: 0.65 }));
         BEDS.forEach((c, i) => { const col = i % 3, row = Math.floor(i / 3); [-0.6, 0.6].forEach(o => obstacles.push({ x: GH.x - 3.8 + col * 2.8 + o, z: GH.z + (row ? 1.9 : -1.9), r: 0.75 })); });
-        obstacles.push({ x: GH.x + 2.0, z: GH.z - 4.6, r: 0.6 });
+        obstacles.push({ ...POS.tank, r: 0.65 });
         for (let r = 0; r < 3; r++) obstacles.push({ x: PW.x + 2.8, z: PW.z - 2.2 + r * 2.2, r: 0.9 });
 
         // столкновения с куполами: стену можно пройти только через тамбур
@@ -1245,8 +1525,9 @@ Game.register({
           if (self.paused || (e.target && e.target.tagName === 'INPUT')) return;
           const k = e.key.toLowerCase();
           if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
+          if (self.talk) { if ((k === 'e' || k === 'у' || k === 'enter' || k === ' ') && !e.repeat && astroNext) astroNext(); return; }
           keys[k] = true;
-          if (k === 'e' || k === 'у' || k === 'enter' || k === ' ') act();
+          if ((k === 'e' || k === 'у' || k === 'enter' || k === ' ') && !e.repeat) act();
         };
         const ku = e => { keys[e.key.toLowerCase()] = false; };
         window.addEventListener('keydown', kd); window.addEventListener('keyup', ku);
@@ -1282,7 +1563,13 @@ Game.register({
           zone.addEventListener('contextmenu', e => e.preventDefault());
         }
         const actBtn = el.querySelector('.fp-act');
-        if (actBtn) actBtn.addEventListener('click', () => act());
+        let actHeld = false;
+        if (actBtn) {
+          actBtn.addEventListener('pointerdown', e => { e.preventDefault(); if (self.talk) { if (astroNext) astroNext(); return; } actHeld = true; act(); });
+          const up = () => { actHeld = false; };
+          actBtn.addEventListener('pointerup', up); actBtn.addEventListener('pointercancel', up); actBtn.addEventListener('pointerleave', up);
+          actBtn.addEventListener('contextmenu', e => e.preventDefault());
+        }
 
         const fwd = () => ({ x: -Math.sin(P.yaw), z: -Math.cos(P.yaw) });
         const right = () => ({ x: Math.cos(P.yaw), z: -Math.sin(P.yaw) });
@@ -1297,19 +1584,59 @@ Game.register({
           });
           return best && best.s;
         }
-        function act() { if (self.paused || S.done) return; const f = focus(); if (f) interact(f.id); }
+        function act() { if (self.paused || self.talk || S.done) return; const f = focus(); if (f) interact(f.id); }
         self.act = act;
 
         // куда идти: первое невыполненное важное дело
+        function ghTarget() {
+          if (S.ghTutorial < 2) { const ind = IND.find(x => !S.indicators[x.k]) || IND[0]; return ind.pos; }
+          if (!S.can.has) return POS.garden;
+          const dryI = BEDS.findIndex((c, i) => bedZone(i) === 'dry');
+          if (S.can.liters < 0.3 && dryI >= 0) return POS.tank;
+          return dryI >= 0 ? plotPos[dryI] : POS.garden;
+        }
         function target() {
           const T = S.today;
+          if (self.goal) { if (Math.hypot(self.goal.x - P.x, self.goal.z - P.z) < 4) self.goal = null; else return self.goal; }
           if (S.day === DAYS && S.repair >= STEPS.length) return SHIP;
-          if (!T.watered) return POS.garden;
+          if (!T.watered) return ghTarget();
           if (S.instructions > S.repair && !(STEPS[S.repair].part && S.parts < 1)) return SHIP;
           if (!T.called && !T.cleaning && !S.broken.antenna) return POS.radio;
           if (!T.energyPlanned) return POS.power;
           return POS.bed;
         }
+
+        self.places = [
+          { key: 'habitat', x: HB.x, z: HB.z, name: L('Жилой модуль', 'Habitat'), desc: L('радио, кровать, склад', 'radio, bed, store'), img: BA + 'mod-habitat.png' },
+          { key: 'greenhouse', x: GH.x, z: GH.z, name: L('Теплица', 'Greenhouse'), desc: L('картофель, томаты, салат', 'potatoes, tomatoes, lettuce'), img: BA + 'mod-greenhouse.png' },
+          { key: 'power', x: PW.x, z: PW.z, name: L('Энергоблок', 'Power room'), desc: L('батареи и расчёт энергии', 'batteries and energy plan'), img: BA + 'mod-battery.png' },
+          { key: 'panels', x: 16.3, z: 11.5, name: L('Солнечные панели', 'Solar panels'), desc: L('энергия и пыль', 'energy and dust'), img: BA + 'mod-solar.png' },
+          { key: 'ship', x: SHIP.x, z: SHIP.z, name: L('Корабль', 'Ship'), desc: L('«Звёздный вихрь», ремонт', '“Star Whirl”, repair'), img: 'assets/sprites/ship.png' }
+        ];
+        self.drawBigMap = cvs => {
+          const g = cvs.getContext('2d'), W = cvs.width, H = cvs.height;
+          drawMapOn(g, W, H, 6.4, W / 2 + 10, H / 2 - 30);
+          const X = x => W / 2 + 10 + x * 6.4, Y = z => H / 2 - 30 + z * 6.4;
+          self.places.forEach((pl, i) => {
+            g.fillStyle = '#ff9a3c'; g.strokeStyle = '#2b2a6b'; g.lineWidth = 4; g.beginPath(); g.arc(X(pl.x), Y(pl.z), 17, 0, 7); g.fill(); g.stroke();
+            g.fillStyle = '#fff'; g.font = '900 20px Nunito, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(i + 1, X(pl.x), Y(pl.z) + 1);
+          });
+          g.font = '800 15px Nunito, sans-serif'; g.fillStyle = '#2b2a6b';
+          g.fillText(L('бур', 'drill'), X(DRILL.x), Y(DRILL.z) + 22); g.fillText(L('антенна', 'antenna'), X(ANT.x), Y(ANT.z) + 20); g.fillText(L('ты', 'you'), X(P.x), Y(P.z) - 18);
+        };
+        // зоны, где ASTRO рассказывает факты
+        const ZONES = [
+          { id: 'habitat', test: () => Math.hypot(P.x - HB.x, P.z - HB.z) < HB.R - 0.8 },
+          { id: 'greenhouse', test: () => Math.hypot(P.x - GH.x, P.z - GH.z) < GH.R - 1.2 },
+          { id: 'power', test: () => Math.hypot(P.x - PW.x, P.z - PW.z) < PW.R - 1.0 },
+          { id: 'panels', test: () => P.x > 8 && P.x < 25 && P.z > 6.5 && P.z < 16.5 },
+          { id: 'ship', test: () => Math.hypot(P.x - SHIP.x, P.z - SHIP.z) < 7.5 },
+          { id: 'drill', test: () => Math.hypot(P.x - DRILL.x, P.z - DRILL.z) < 6 },
+          { id: 'antenna', test: () => Math.hypot(P.x - ANT.x, P.z - ANT.z) < 5.5 }
+        ];
+        // пролёт камеры к ASTRO во вступлении
+        let intro = null;
+        self.flyIn = done => { intro = { k: 0, done }; };
 
         /* ---------- обновления по событиям игры ---------- */
         const wilt = new THREE.Color(0xa88a56);
@@ -1329,7 +1656,7 @@ Game.register({
         self.morning = () => { PANELS.forEach((p, i) => self.panelSet(i, !S.dust)); self.plantsUpdate(); };
         self.refresh = () => {
           const T = S.today;
-          MARK.garden.visible = !T.watered; MARK.power.visible = !T.energyPlanned;
+          MARK.garden.visible = !T.watered && S.started; MARK.power.visible = !T.energyPlanned;
           MARK.radio.visible = !T.called && !T.cleaning && !S.broken.antenna;
           MARK.ship.visible = S.instructions > S.repair || (S.day === DAYS && S.repair >= STEPS.length);
           MARK.drill.visible = !!S.broken.drill; MARK.antenna.visible = !!S.broken.antenna;
@@ -1341,7 +1668,11 @@ Game.register({
           const lit = Math.round(S.battery / cap() * cells.length);
           cells.forEach((c, i) => c.material.color.setHex(i < lit ? (S.battery / cap() > 0.3 ? 0x5fd8ff : 0xff6b8a) : 0x3b3770));
           tankLevel.scale.y = clamp01(S.water / 100) + 0.02; tankLevel.position.y = 0.8 + tankLevel.scale.y * 0.8;
-          radio.upd(); gardenScr.upd(); powerScr.upd();
+          radio.upd(); powerScr.upd(); IND.forEach(ind => ind.scr.upd()); bars.forEach(d => d());
+          standCan.visible = !S.can.has; handCan.visible = S.can.has;
+          const gt = ghTarget(); MARK.garden.position.x = gt.x; MARK.garden.position.z = gt.z;
+          canEl.hidden = !S.can.has;
+          if (S.can.has) { canEl.querySelector('b').textContent = `${num(S.can.liters, 1)} / ${CAN_CAP} ${L('л', 'L')}`; canEl.querySelector('.bar i').style.width = (S.can.liters / CAN_CAP * 100) + '%'; }
         };
         self.morning(); self.shipUpdate(); self.refresh();
 
@@ -1350,13 +1681,29 @@ Game.register({
         function loop(now) {
           if (!running) return;
           const dt = Math.min(0.05, (now - last) / 1000); last = now; t += dt;
-          if (!self.paused) update(dt);
+          if (intro) flyStep(dt);
+          else if (!self.paused && !self.talk) update(dt);
+          else { promptEl.hidden = true; pourAmt = 0; }
           animate(dt);
           renderer.render(scene, camera);
           drawMap();
           ctx.frame(loop);
         }
         ctx.frame(loop);
+        function flyStep(dt) {
+          intro.k = Math.min(1, intro.k + dt / 4.5);
+          const e = intro.k < 0.5 ? 2 * intro.k * intro.k : 1 - Math.pow(-2 * intro.k + 2, 2) / 2;
+          const from = new THREE.Vector3(-6, 26, 52), to = new THREE.Vector3(0, 1.6, 14.3);
+          camera.position.lerpVectors(from, to, e);
+          const look = new THREE.Vector3(0, 2, -2).lerp(new THREE.Vector3(A_STAND.x, 1.25, A_STAND.z), e);
+          camera.lookAt(look);
+          promptEl.hidden = true;
+          if (intro.k >= 1) {
+            P.x = to.x; P.z = to.z; P.yaw = 0; P.pitch = Math.atan2(1.25 - 1.6, 15 - A_STAND.z);
+            camera.rotation.set(P.pitch, P.yaw, 0);
+            const d = intro.done; intro = null; d();
+          }
+        }
         function update(dt) {
           const fw = (keys.w || keys.arrowup || keys['ц'] ? 1 : 0) - (keys.s || keys.arrowdown || keys['ы'] ? 1 : 0) - joy.y;
           const st = (keys.d || keys['в'] ? 1 : 0) - (keys.a || keys['ф'] ? 1 : 0);
@@ -1371,12 +1718,49 @@ Game.register({
           camera.rotation.set(P.pitch, P.yaw, 0);
           const fo = focus();
           promptEl.hidden = !fo;
-          if (fo) promptEl.innerHTML = (touch ? '' : '<span class="kbd">E</span> ') + fo.label;
+          if (fo) promptEl.innerHTML = (touch ? '' : '<span class="kbd">E</span> ') + (typeof fo.label === 'function' ? fo.label() : fo.label);
+          // полив: пока игрок держит кнопку над грядкой
+          const hold = keys.e || keys['у'] || keys[' '] || actHeld;
+          pourAmt = 0;
+          if (fo && fo.plot !== undefined && hold && S.can.has) {
+            if (S.can.liters > 0.001) {
+              pourAmt = Math.min(dt * 1.2, S.can.liters);
+              S.can.liters -= pourAmt; S.today.bedWater[fo.plot] += pourAmt;
+              bars[fo.plot](); pourCheck(fo.plot);
+              canEl.querySelector('b').textContent = `${num(S.can.liters, 1)} / ${CAN_CAP} ${L('л', 'L')}`; canEl.querySelector('.bar i').style.width = (S.can.liters / CAN_CAP * 100) + '%';
+              if (S.can.liters <= 0.001) { S.can.liters = 0; canEmpty(); }
+            }
+          }
+          // факты ASTRO при первом посещении мест
+          if (S.started && !modal) for (const z of ZONES) if (!S.seen[z.id] && z.test()) { S.seen[z.id] = true; onZone(z.id); break; }
           const tg = target();
           arrowEl.style.transform = `rotate(${relAngle(tg.x, tg.z) * 180 / Math.PI}deg)`;
           distEl.textContent = Math.round(Math.hypot(tg.x - P.x, tg.z - P.z)) + L(' м', ' m');
         }
         function animate(dt) {
+          // ASTRO: во вступлении стоит у входа, потом появляется рядом с игроком, когда говорит
+          if (astroMode === 'stand' && S.started && !self.talk) astroMode = 'follow';
+          if (astroMode === 'follow') {
+            const f = fwd(), r = right();
+            const tx = P.x + f.x * 2.1 + r.x * 0.95, tz = P.z + f.z * 2.1 + r.z * 0.95;
+            if (astroVis < 0.05 && astroWant) astro.position.set(tx, 0, tz);
+            astro.position.x += (tx - astro.position.x) * Math.min(1, dt * 4);
+            astro.position.z += (tz - astro.position.z) * Math.min(1, dt * 4);
+            astro.position.y = (Math.hypot(P.x, P.z) < 29 ? 0.06 : groundH(P.x, P.z)) + 0.55;
+          } else astro.position.y = 0.25;
+          astroVis += ((astroMode === 'stand' ? 1 : astroWant) - astroVis) * Math.min(1, dt * 6);
+          astro.visible = astroVis > 0.03; astro.scale.setScalar(Math.max(0.001, astroVis));
+          aBody.position.y = Math.sin(t * 2.4) * 0.06;
+          astro.lookAt(camera.position.x, astro.position.y, camera.position.z);
+          const aL = astro.userData.armL, aR = astro.userData.armR;
+          if (astroPose === 'wave') { aR.rotation.set(0, 0, 2.6 + Math.sin(t * 9) * 0.35); aL.rotation.set(0, 0, -0.25); }
+          else if (astroPose === 'alarm') { aR.rotation.set(0, 0, 2.7 + Math.sin(t * 14) * 0.15); aL.rotation.set(0, 0, -2.7 - Math.sin(t * 14) * 0.15); }
+          else { aR.rotation.set(-1.4, 0, 0.5); aL.rotation.set(0, 0, -0.25); }
+          astro.userData.jet.material.opacity = 0.4 + Math.random() * 0.25;
+          const blink = (t % 3.2) < 0.12; astro.userData.eyes.forEach(e => { e.scale.y = blink ? 0.15 : 1; });
+          // лейка в руке наклоняется, когда льёшь воду
+          handCan.rotation.z += ((pourAmt > 0 ? -0.75 : 0) - handCan.rotation.z) * Math.min(1, dt * 8);
+          drops.forEach(p => { p.d.visible = pourAmt > 0; if (pourAmt > 0) { p.t = (p.t + dt * 2.2) % 1; p.d.position.set(0.42 + p.t * 0.05, 0.36 - p.t * 0.7, (p.t * 37 % 1 - 0.5) * 0.08); } });
           dishHolder.rotation.y += S.broken.antenna ? 0 : dt * 0.25;
           beacon.visible = Math.sin(t * 5) > 0;
           if (drillOn()) bit.rotation.y += dt * 7;
@@ -1391,22 +1775,23 @@ Game.register({
           if (hotMark.visible) hotMark.children.forEach((c, i) => { c.scale.setScalar(0.8 + Math.abs(Math.sin(t * 7 + i)) * 0.5); });
           if (smokeDrill.visible) { smokeDrill.position.y = 6.3 + (t % 2) * 1.5; smokeDrill.scale.setScalar(1 + (t % 2)); smokeDrill.material.opacity = 0.6 - (t % 2) * 0.3; }
         }
-        function drawMap() {
-          const W = mapCv.width, H = mapCv.height, sc = 1.75, ox = W / 2, oy = H / 2 - 6;
-          const X = x => ox + x * sc, Y = z => oy + z * sc;
+        function drawMap() { drawMapOn(mg, mapCv.width, mapCv.height, 1.75, mapCv.width / 2, mapCv.height / 2 - 6, true); }
+        function drawMapOn(mg, W, H, sc, ox, oy, small) {
+          const X = x => ox + x * sc, Y = z => oy + z * sc, q = small ? 1 : 2.6;
           mg.clearRect(0, 0, W, H);
           mg.fillStyle = '#ffb48a'; mg.fillRect(0, 0, W, H);
           mg.fillStyle = '#ffdcc6'; mg.beginPath(); mg.arc(X(0), Y(0), 29 * sc, 0, 7); mg.fill();
           PASSAGES.filter(p => p.to).forEach(p => { mg.strokeStyle = '#2b2a6b'; mg.lineWidth = 5; mg.beginPath(); mg.moveTo(X(p.sx), Y(p.sz)); mg.lineTo(X(p.sx + p.dx * p.len), Y(p.sz + p.dz * p.len)); mg.stroke(); mg.strokeStyle = '#fff'; mg.lineWidth = 3; mg.stroke(); });
           DOMES.forEach(d => { mg.fillStyle = d.glass ? '#9fe8ff' : '#ffffff'; mg.strokeStyle = '#2b2a6b'; mg.lineWidth = 1.5; mg.beginPath(); mg.arc(X(d.x), Y(d.z), d.R * sc, 0, 7); mg.fill(); mg.stroke(); });
-          PANELS.forEach(p => { mg.fillStyle = p.clean ? '#2a55e0' : '#b9774c'; mg.fillRect(X(p.x) - 3, Y(p.z) - 2, 6, 4); });
-          mg.fillStyle = '#ff5d6c'; mg.beginPath(); mg.arc(X(SHIP.x), Y(SHIP.z), 4, 0, 7); mg.fill();
-          mg.fillStyle = '#6fc8ff'; mg.beginPath(); mg.arc(X(DRILL.x), Y(DRILL.z), 3, 0, 7); mg.fill();
-          mg.fillStyle = '#9a96d0'; mg.beginPath(); mg.arc(X(ANT.x), Y(ANT.z), 2.5, 0, 7); mg.fill();
-          const tg = target(); mg.strokeStyle = '#ff9a3c'; mg.lineWidth = 2; mg.beginPath(); mg.arc(X(tg.x), Y(tg.z), 5 + Math.sin(t * 5), 0, 7); mg.stroke();
+          PANELS.forEach(p => { mg.fillStyle = p.clean ? '#2a55e0' : '#b9774c'; mg.fillRect(X(p.x) - 3 * q, Y(p.z) - 2 * q, 6 * q, 4 * q); });
+          mg.fillStyle = '#ff5d6c'; mg.beginPath(); mg.arc(X(SHIP.x), Y(SHIP.z), 4 * q, 0, 7); mg.fill();
+          mg.fillStyle = '#6fc8ff'; mg.beginPath(); mg.arc(X(DRILL.x), Y(DRILL.z), 3 * q, 0, 7); mg.fill();
+          mg.fillStyle = '#9a96d0'; mg.beginPath(); mg.arc(X(ANT.x), Y(ANT.z), 2.5 * q, 0, 7); mg.fill();
+          if (small) { const tg = target(); mg.strokeStyle = '#ff9a3c'; mg.lineWidth = 2; mg.beginPath(); mg.arc(X(tg.x), Y(tg.z), 5 + Math.sin(t * 5), 0, 7); mg.stroke(); }
           const f = fwd();
           mg.save(); mg.translate(X(P.x), Y(P.z)); mg.rotate(Math.atan2(f.z, f.x));
-          mg.fillStyle = '#ff3d6e'; mg.beginPath(); mg.moveTo(6, 0); mg.lineTo(-4, -4); mg.lineTo(-4, 4); mg.closePath(); mg.fill();
+          const k = small ? 1 : 2.2;
+          mg.fillStyle = '#ff3d6e'; mg.beginPath(); mg.moveTo(6 * k, 0); mg.lineTo(-4 * k, -4 * k); mg.lineTo(-4 * k, 4 * k); mg.closePath(); mg.fill();
           mg.restore();
         }
       }

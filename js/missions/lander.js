@@ -35,10 +35,19 @@ Game.register({
       mars: { id: 'mars', name: L('Марс', 'Mars'), g: 3.71, ground: '#d9824f', bg: 'assets/base/base-mars.jpg', fuel: 100, wind: 0.25 }
     };
     let B = null, attempts = 0, runId = 0, stopKeys = null;
-    choose();
+    ctx.step(0);
+    ctx.astroBrief([
+      [L('Привет! Я <b>ASTRO</b>. Сейчас будем сажать <b>посадочный модуль</b>. Гравитация тянет его вниз, а двигатель толкает вверх.', 'Hi! I’m <b>ASTRO</b>. Now we’ll land the <b>lander</b>. Gravity pulls it down and the engine pushes it up.'), 'wave'],
+      [L('Садись на <b>площадку с огнями</b> — над ней написано «СЮДА». Скорость вниз должна быть меньше <b>4 м/с</b>, модуль — ровно, без скольжения вбок.', 'Land on the <b>pad with lights</b> — it says “HERE” above it. Fall speed must be under <b>4 m/s</b>, the lander level, not sliding sideways.'), 'point'],
+      [Game.isTouch
+        ? L('<b>Управление:</b> большая кнопка «Газ» включает двигатель, кнопки по бокам наклоняют модуль. Включай двигатель короткими нажатиями!', '<b>Controls:</b> the big “Thrust” button fires the engine, the side buttons tilt the lander. Fire the engine in short bursts!')
+        : L('<b>Управление:</b> <span class="kbd">↑</span> / <span class="kbd">W</span> / <span class="kbd">Пробел</span> — двигатель, <span class="kbd">←</span> <span class="kbd">→</span> — наклон. Включай двигатель короткими нажатиями!', '<b>Controls:</b> <span class="kbd">↑</span> / <span class="kbd">W</span> / <span class="kbd">Space</span> — engine, <span class="kbd">←</span> <span class="kbd">→</span> — tilt. Fire the engine in short bursts!'), 'point'],
+      [L('Садиться можно на <b>Луну</b> — там легко, или на <b>Марс</b> — гравитация сильнее, да ещё ветер. Выбирай!', 'You can land on the <b>Moon</b> — it’s easy, or on <b>Mars</b> — stronger gravity and some wind. Your choice!'), 'wave']
+    ], L('Выбрать цель →', 'Choose a target →'), choose);
 
     function choose() {
       ctx.step(0);
+      ctx.stage.innerHTML = '';
       ctx.mc(L('Посадочный модуль готов к спуску. Куда садимся? На Марсе гравитация сильнее — будет труднее.', 'The lander is ready to descend. Where are we landing? Mars has stronger gravity — it’ll be harder.'));
       const card = b => `
         <button class="place-card panel" data-b="${b.id}">
@@ -52,10 +61,6 @@ Game.register({
       const el = h(`
         <div>
           <div class="place-grid">${card(BODY.moon)}${card(BODY.mars)}</div>
-          <div class="panel card" style="margin-top:16px"><div class="fact">${Game.isTouch
-            ? L('<b>Управление:</b> большая кнопка «Газ» включает двигатель, кнопки по бокам наклоняют модуль.', '<b>Controls:</b> the big “Thrust” button fires the engine, the side buttons tilt the lander.')
-            : L('<b>Управление:</b> <span class="kbd">↑</span> / <span class="kbd">W</span> / <span class="kbd">Пробел</span> — двигатель, <span class="kbd">←</span> <span class="kbd">→</span> — наклон.', '<b>Controls:</b> <span class="kbd">↑</span> / <span class="kbd">W</span> / <span class="kbd">Space</span> — engine, <span class="kbd">←</span> <span class="kbd">→</span> — tilt.')}
-          ${L('Сядь на <b>площадку с огнями</b>: вертикальная скорость меньше 4 м/с, модуль ровно.', 'Land on the <b>pad with lights</b>: vertical speed under 4 m/s, lander level.')}</div></div>
         </div>`);
       el.querySelectorAll('.place-card').forEach(b => b.onclick = () => { sfx.click(); B = BODY[b.dataset.b]; fly(); });
       ctx.stage.appendChild(el);

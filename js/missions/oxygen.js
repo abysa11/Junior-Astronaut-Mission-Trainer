@@ -94,15 +94,21 @@ Game.register({
                    'Scan the modules one by one and look for little gas clouds: they show where the leak is. Wrong actions waste oxygen.'));
       }
     }
-    ctx.every(250, () => { if (rate > 0) { o2 = clamp(o2 - rate / 4, 0, 100); renderO2(); check(); } });
+    let briefing = true; // пока ASTRO объясняет, кислород не тратится
+    ctx.every(250, () => { if (rate > 0 && !briefing) { o2 = clamp(o2 - rate / 4, 0, 100); renderO2(); check(); } });
 
-    stepFind();
+    ctx.step(0);
+    ctx.astroBrief([
+      [L('<b>Тревога!</b> Давление кислорода падает — где-то на корабле утечка. Без паники, я ASTRO, и я помогу!', '<b>Alarm!</b> Oxygen pressure is dropping — there’s a leak somewhere on the ship. Don’t panic, I’m ASTRO and I’ll help!'), 'alarm'],
+      [L('Нормальное давление — около <b>101 кПа</b>. Проверь отсеки датчиком: где давление ниже и продолжает падать, там и утечка. Ищи облачка газа!', 'Normal pressure is about <b>101 kPa</b>. Check the modules with the sensor: where the pressure is lower and still falling, that’s the leak. Look for little clouds of gas!'), 'point'],
+      [L('Потом выберешь <b>правильный инструмент</b> и починишь всё <b>в правильном порядке</b>: сначала безопасность, потом ремонт. Кислород тает — действуй быстро!', 'Then you’ll pick the <b>right tool</b> and fix everything <b>in the right order</b>: safety first, then the repair. Oxygen is running out — be quick!'), 'point']
+    ], L('Искать утечку →', 'Find the leak →'), () => { briefing = false; stepFind(); });
 
     /* ---------------- 1. Найти утечку ---------------- */
     function stepFind() {
       ctx.step(0);
-      ctx.mc(L('<b>Тревога!</b> Давление кислорода падает. Возьми <b>датчик давления</b> и проверь отсеки: нажимай на них по очереди.',
-               '<b>Alarm!</b> Oxygen pressure is dropping. Take the <b>pressure sensor</b> and check the modules: tap them one by one.'), 'alarm');
+      ctx.mc(L('Нажимай на отсеки по очереди — датчик покажет давление в каждом. Кислород уходит, поторопись!',
+               'Tap the modules one by one — the sensor will show the pressure in each. Oxygen is escaping, hurry!'), 'alarm');
       const el = h(`
         <div class="panel card">
           <div class="task-title"><span class="num">1</span><h2>${L('Найди повреждённый отсек', 'Find the damaged module')}</h2></div>

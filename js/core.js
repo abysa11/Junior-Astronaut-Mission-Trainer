@@ -323,17 +323,55 @@
         ctx.stage.classList.remove('wide');
         window.scrollTo({ top: 0, behavior: 'smooth' });
       },
-      /* Сообщение от Центра управления полётами */
+      /* Подсказка от робота-помощника ASTRO */
       mc(text, mood = 'info') {
         mcSlot.innerHTML = '';
         if (!text) return;
+        const pose = mood === 'alarm' || mood === 'bad' ? 'alarm' : mood === 'good' ? 'wave' : 'point';
         const b = h(`<div class="mc screen ${mood}" role="status">
-            <div class="mc-ava"><img src="assets/sprites/mc.png" alt="${L('ЦУП', 'Mission Control')}"></div>
-            <div class="mc-text"><b>${L('Центр управления:', 'Mission Control:')}</b> <span></span></div>
+            <div class="mc-ava"><img src="assets/sprites/astro-${pose}.png" alt="ASTRO"></div>
+            <div class="mc-text"><b>ASTRO:</b> <span></span></div>
           </div>`);
         b.querySelector('.mc-text span').innerHTML = text;
         mcSlot.appendChild(b);
         if (mood === 'alarm') sfx.alarm(); else if (mood === 'bad') sfx.bad(); else sfx.radio();
+      },
+      /* ASTRO объясняет игру: реплики по очереди, в конце — кнопка старта.
+         lines: [[html, 'wave' | 'point' | 'alarm'], ...]; opts.img — картинка сверху */
+      astroBrief(lines, label, onDone, opts = {}) {
+        mcSlot.innerHTML = '';
+        const el = h(`
+          <div class="panel card astro-brief">
+            ${opts.img ? `<div class="scene" style="background-image:url('${opts.img}')"></div>` : ''}
+            <div class="ab-row">
+              <img class="ab-astro" src="assets/sprites/astro-wave.png" alt="ASTRO">
+              <div class="ab-bubble">
+                <b class="astro-name">ASTRO</b>
+                <div class="ab-text"></div>
+                <div class="ab-foot"><span class="ab-dots">${lines.map(() => '<i></i>').join('')}</span>
+                  <button class="btn ghost small ab-back">${L('← Назад', '← Back')}</button>
+                  <button class="btn orange big ab-next"></button></div>
+              </div>
+            </div>
+          </div>`);
+        const img = el.querySelector('.ab-astro'), txt = el.querySelector('.ab-text'), next = el.querySelector('.ab-next'), back = el.querySelector('.ab-back');
+        const dots = el.querySelectorAll('.ab-dots i');
+        let i = 0;
+        const show = () => {
+          const [t, pose] = lines[i];
+          img.src = `assets/sprites/astro-${pose || 'point'}.png`;
+          txt.innerHTML = t;
+          [img, txt].forEach(x => { x.classList.remove('pop'); void x.offsetWidth; x.classList.add('pop'); });
+          dots.forEach((d, j) => d.classList.toggle('on', j <= i));
+          back.style.visibility = i ? 'visible' : 'hidden';
+          next.textContent = i === lines.length - 1 ? label : L('Далее →', 'Next →');
+          if (pose === 'alarm') sfx.alarm(); else sfx.radio();
+        };
+        next.onclick = () => { sfx.click(); if (i < lines.length - 1) { i++; show(); } else { onDone(); } };
+        back.onclick = () => { sfx.click(); if (i > 0) { i--; show(); } };
+        ctx.stage.appendChild(el);
+        show();
+        return el;
       },
       /* Итог: stars 1..3, notes — что получилось / что улучшить */
       finish(stars, notes = []) {
@@ -393,7 +431,7 @@
     const el = h(`
       <section class="result fade-in">
         <div class="panel result-card fail">
-          ${ico('mc', 'fail-ico')}
+          <img class="ico fail-ico" src="assets/sprites/astro-alarm.png" alt="ASTRO">
           <p class="eyebrow">${L('Тренировка остановлена', 'Training stopped')}</p>
           <h2>${esc(m.title)}</h2>
           <p class="verdict">${reason}</p>
