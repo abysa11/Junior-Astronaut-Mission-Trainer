@@ -1769,7 +1769,6 @@ Game.register({
           astro.lookAt(camera.position.x, astro.position.y, camera.position.z);
           astro.userData.am.pose(astroWant || astroMode === 'stand' ? astroPose : 'idle', t, dt);
           astro.userData.jet.material.opacity = 0.4 + Math.random() * 0.25;
-          const blink = (t % 3.2) < 0.12; astro.userData.eyes.forEach(e => { e.scale.y = blink ? 0.15 : 1; });
           // лейка в руке наклоняется, когда льёшь воду
           handCan.rotation.x += ((pourAmt > 0 ? -0.85 : 0) - handCan.rotation.x) * Math.min(1, dt * 8);
           if (pourAmt > 0) { spoutTip.getWorldPosition(tipV); camera.worldToLocal(tipV); }

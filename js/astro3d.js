@@ -125,8 +125,19 @@ window.AstroModel = {
       const eye = new THREE.Mesh(new THREE.CircleGeometry(0.07, 40), glowMat(0xf4ffff)); eye.position.copy(visorPos(px, 0.12, 0.024)); eye.lookAt(out); head.add(eye);
       eyes.push(eye, ring);
     });
-    const smilePts = []; for (let k = 0; k <= 16; k++) { const a = k / 16; smilePts.push(visorPos(-0.16 + a * 0.32, -0.42 - Math.sin(a * Math.PI) * 0.12, 0.024)); }
-    head.add(tube(smilePts, 0.011, glowMat(0xe8ffff), false, 32));
+    // мимика: несколько ртов и брови, нужный включается по эмоции
+    const faceMat = glowMat(0xe8ffff);
+    const curve = (x0, x1, yMid, bend, n = 16) => { const pts = []; for (let k = 0; k <= n; k++) { const a = k / n; pts.push(visorPos(x0 + a * (x1 - x0), yMid - Math.sin(a * Math.PI) * bend, 0.024)); } return pts; };
+    const mouths = {
+      smile: tube(curve(-0.16, 0.16, -0.42, 0.12), 0.011, faceMat, false, 32),          // спокойная улыбка
+      grin: tube(curve(-0.22, 0.22, -0.38, 0.2), 0.013, faceMat, false, 32),            // широкая радостная улыбка
+      frown: tube(curve(-0.13, 0.13, -0.58, -0.1), 0.011, faceMat, false, 32),          // испуганный рот «скобкой вниз»
+      wow: new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.01, 8, 20), faceMat)          // удивлённое «о»
+    };
+    mouths.wow.position.copy(visorPos(0, -0.5, 0.024)); mouths.wow.lookAt(visorPos(0, -0.5, 0.3));
+    Object.values(mouths).forEach(m => { m.visible = false; head.add(m); });
+    // брови: внутренние концы приподняты — так лицо выглядит встревоженным
+    const brows = [-1, 1].map(sd => { const b = tube([visorPos(sd * 0.56, 0.6, 0.028), visorPos(sd * 0.4, 0.66, 0.028), visorPos(sd * 0.22, 0.8, 0.028)], 0.015, faceMat, false, 16); b.visible = false; head.add(b); return b; });
 
     // оранжевая пластина на макушке со своей рамкой
     const capVis = { phi: Math.PI / 2, th: 0.38 };
@@ -310,7 +321,21 @@ window.AstroModel = {
       });
       ease(u.thumb.rotation, 'x', 0.5 + curl * 0.6, k);
     };
+    // эмоции на лице: wave — радость, point — спокойная улыбка, alarm — испуг, idle — улыбка
+    function face(name, t) {
+      const scared = name === 'alarm';
+      mouths.smile.visible = name === 'point' || name === 'idle';
+      mouths.grin.visible = name === 'wave';
+      mouths.frown.visible = scared && Math.sin(t * 1.3) > -0.6;
+      mouths.wow.visible = scared && !mouths.frown.visible;
+      brows.forEach(b => { b.visible = scared; });
+      // глаза: при испуге шире, при радости чуть прищурены; иногда моргают
+      const blink = (t % 3.2) < 0.12;
+      const sx = scared ? 1.12 : 1, sy = blink ? 0.12 : scared ? 1.12 : name === 'wave' ? 0.85 : 1;
+      eyes.forEach(e => e.scale.set(sx, sy, 1));
+    }
     function pose(name, t, dt) {
+      face(name, t);
       const k = Math.min(1, dt * 9);
       const sway = Math.sin(t * 1.6);
       if (name === 'wave') {
