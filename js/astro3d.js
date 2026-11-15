@@ -231,25 +231,34 @@ window.AstroModel = {
       const k2 = new THREE.Group(); k2.position.y = -len - 0.03; k2.rotation.x = 0.35; f.add(k2);
       add(new THREE.Mesh(new THREE.SphereGeometry(0.018, 10, 8), greyL), k2, 0);
       add(new THREE.Mesh(new THREE.CapsuleGeometry(0.016, len * 0.8, 4, 10), grey), k2, 0.005).position.y = -len * 0.4 - 0.016;
+      f.userData.k2 = k2;
       return f;
     };
+    // рука из суставов: плечо → локоть → запястье → пальцы из двух фаланг
     const arm = sd => {
-      const g = new THREE.Group(); g.position.set(sd * 0.275, 0.625, 0); root.add(g);
+      const g = new THREE.Group(); g.position.set(sd * 0.275, 0.625, 0); root.add(g);          // плечевой сустав
       add(new THREE.Mesh(new THREE.SphereGeometry(0.06, 16, 12), grey), g, 0.01);
-      const pad = add(new THREE.Mesh(padG, org), g, 0.012); pad.position.y = 0.01; pad.rotation.z = -sd * 0.35;
-      const pr = new THREE.Mesh(new THREE.TorusGeometry(0.094, 0.012, 8, 28), white2); pr.rotation.x = Math.PI / 2; pr.rotation.y = -sd * 0.35; pr.position.y = 0.012; g.add(pr);
+      // наплечник крепится к корпусу, а не к руке — так он не «улетает» при подъёме руки
+      const padHolder = new THREE.Group(); padHolder.position.copy(g.position); root.add(padHolder);
+      const pad = add(new THREE.Mesh(padG, org), padHolder, 0.012); pad.position.y = 0.01; pad.rotation.z = -sd * 0.35;
+      const pr = new THREE.Mesh(new THREE.TorusGeometry(0.094, 0.012, 8, 28), white2); pr.rotation.x = Math.PI / 2; pr.rotation.y = -sd * 0.35; pr.position.y = 0.012; padHolder.add(pr);
       add(new THREE.Mesh(upperG, white), g, 0.012).position.y = -0.03;
-      const elbow = add(new THREE.Mesh(new THREE.SphereGeometry(0.047, 14, 10), grey), g, 0.008); elbow.position.y = -0.19;
       const band = new THREE.Mesh(new THREE.TorusGeometry(0.056, 0.013, 8, 24), cyan); band.rotation.x = Math.PI / 2; band.position.y = -0.155; g.add(band);
-      add(new THREE.Mesh(foreG, white), g, 0.012).position.y = -0.04;
-      const wrist = new THREE.Mesh(new THREE.TorusGeometry(0.058, 0.013, 8, 24), org); wrist.rotation.x = Math.PI / 2; wrist.position.y = -0.345; g.add(wrist);
-      // перчатка
-      const hand = new THREE.Group(); hand.position.y = -0.39; hand.rotation.y = sd * 0.3; g.add(hand);
+      const elbow = new THREE.Group(); elbow.position.y = -0.19; g.add(elbow);                  // локтевой сустав
+      add(new THREE.Mesh(new THREE.SphereGeometry(0.047, 14, 10), grey), elbow, 0.008);
+      add(new THREE.Mesh(foreG, white), elbow, 0.012).position.y = 0.15;
+      const wristRing = new THREE.Mesh(new THREE.TorusGeometry(0.058, 0.013, 8, 24), org); wristRing.rotation.x = Math.PI / 2; wristRing.position.y = -0.155; elbow.add(wristRing);
+      const wrist = new THREE.Group(); wrist.position.y = -0.17; elbow.add(wrist);               // запястье
+      const hand = new THREE.Group(); hand.position.y = -0.03; hand.rotation.y = sd * 0.3; wrist.add(hand);
       add(new THREE.Mesh(plate(0.085, 0.075, 0.03, 0.035, 0.014), grey), hand, 0.008);
       const knuck = new THREE.Mesh(new THREE.CapsuleGeometry(0.014, 0.07, 4, 10), greyL); knuck.rotation.z = Math.PI / 2; knuck.position.set(0, -0.035, 0.012); hand.add(knuck);
-      for (let k = 0; k < 4; k++) { const f = finger(k === 0 || k === 3 ? 0.03 : 0.036); f.position.set(-0.034 + k * 0.023, -0.04, 0.0); f.rotation.set(0.25, 0, (k - 1.5) * 0.08); hand.add(f); }
+      const fingers = [];
+      for (let k = 0; k < 4; k++) { const f = finger(k === 0 || k === 3 ? 0.03 : 0.036); f.position.set(-0.034 + k * 0.023, -0.04, 0.0); f.rotation.set(0.25, 0, (k - 1.5) * 0.08); hand.add(f); fingers.push(f); }
       const th = finger(0.026); th.position.set(-sd * 0.05, 0.0, 0.015); th.rotation.set(0.3, 0, -sd * 1.05); hand.add(th);
-      g.rotation.z = sd * 0.22; return g;
+      // указательный палец — ближний к телу
+      g.userData = { sd, elbow, wrist, fingers, thumb: th, index: sd > 0 ? 0 : 3 };
+      g.rotation.z = sd * 0.18; elbow.rotation.x = -0.3;
+      return g;
     };
     const armL = arm(-1), armR = arm(1);
 
@@ -285,6 +294,41 @@ window.AstroModel = {
     // свечение под ногами
     const footGlow = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.4, 20, 1, true), flameMat); footGlow.rotation.x = Math.PI; footGlow.position.y = -0.18; root.add(footGlow);
 
-    return { root, armL, armR, jet, eyes };
+    // pose: 'wave' — машет, 'point' — показывает, 'alarm' — тревожится, 'idle' — стоит
+    const ease = (obj, key, target, k) => { obj[key] += (target - obj[key]) * k; };
+    const setArm = (a, sx, sz, ex, ez, wx, wz, curl, indexOut, k) => {
+      const u = a.userData;
+      ease(a.rotation, 'x', sx, k); ease(a.rotation, 'z', u.sd * sz, k);
+      ease(u.elbow.rotation, 'x', ex, k); ease(u.elbow.rotation, 'z', u.sd * ez, k);
+      ease(u.wrist.rotation, 'x', wx, k); ease(u.wrist.rotation, 'z', u.sd * wz, k);
+      u.fingers.forEach((f, i) => {
+        const c = indexOut && i === u.index ? 0 : curl;
+        ease(f.rotation, 'x', 0.15 + c * 1.1, k); ease(f.userData.k2.rotation, 'x', 0.2 + c * 1.2, k);
+      });
+      ease(u.thumb.rotation, 'x', 0.3 + curl * 0.6, k);
+    };
+    function pose(name, t, dt) {
+      const k = Math.min(1, dt * 9);
+      const sway = Math.sin(t * 1.6);
+      if (name === 'wave') {
+        // правая рука: плечо отведено в сторону, локоть согнут вверх, кисть машет
+        setArm(armR, -0.15, 1.25, 0, 1.55 + Math.sin(t * 8) * 0.38, 0, Math.sin(t * 8 + 0.6) * 0.35, 0.05, false, k);
+        setArm(armL, sway * 0.06, 0.2, -0.35, 0, 0, 0, 0.35, false, k);
+      } else if (name === 'point') {
+        // правая рука вытянута вперёд-вбок, указательный палец выпрямлен
+        setArm(armR, -1.25, 0.45, -0.2, 0.15, -0.15, 0, 1, true, k);
+        setArm(armL, sway * 0.06, 0.2, -0.4, 0, 0, 0, 0.35, false, k);
+      } else if (name === 'alarm') {
+        // обе руки подняты вверх ладонями вперёд и дрожат
+        const sh = Math.sin(t * 16) * 0.12;
+        setArm(armR, -0.25, 1.85 + sh, 0, 1.0, 0, 0.25 + sh, 0.0, false, k);
+        setArm(armL, -0.25, 1.85 - sh, 0, 1.0, 0, 0.25 - sh, 0.0, false, k);
+      } else {
+        setArm(armR, -sway * 0.06, 0.2, -0.35, 0, 0, 0, 0.35, false, k);
+        setArm(armL, sway * 0.06, 0.2, -0.35, 0, 0, 0, 0.35, false, k);
+      }
+    }
+
+    return { root, armL, armR, jet, eyes, pose };
   }
 };

@@ -315,8 +315,19 @@ Game.register({
     }
     function canUI() {
       if (S.ghTutorial < 2) { say(L('Сначала проверь три индикатора у входа — термометр, влажность и свет.', 'First check the three indicators by the entrance — temperature, moisture and light.')); return; }
-      S.can.has = true; sfx.ok();
-      say(L(`Лейка у тебя! В неё помещается ${CAN_CAP} литров. Теперь наполни её у бака с водой.`, `You’ve got the can! It holds ${CAN_CAP} litres. Now fill it at the water tank.`), 'good');
+      sfx.click();
+      if (S.can.has) {
+        // ставим лейку обратно на подставку; вода в ней остаётся
+        S.can.has = false;
+        say(S.can.liters > 0.05
+          ? L(`Лейка на месте. В ней осталось ${num(S.can.liters, 1)} л — вода не пропадёт, можно взять её снова.`, `The can is back in place. It still has ${num(S.can.liters, 1)} L — the water stays in it, you can take it again.`)
+          : L('Лейка на месте. Молодец, что убрал за собой!', 'The can is back in place. Nice tidying up!'), 'good');
+      } else {
+        S.can.has = true;
+        say(S.can.liters > 0.05
+          ? L(`Лейка у тебя! В ней ${num(S.can.liters, 1)} л из ${CAN_CAP}.`, `You’ve got the can! It has ${num(S.can.liters, 1)} of ${CAN_CAP} L.`)
+          : L(`Лейка у тебя! В неё помещается ${CAN_CAP} литров. Теперь наполни её у бака с водой.`, `You’ve got the can! It holds ${CAN_CAP} litres. Now fill it at the water tank.`), 'good');
+      }
       renderHud();
     }
     function tankUI() {
@@ -1455,9 +1466,13 @@ Game.register({
 
         /* ---------- лейка в руке (видна от первого лица) ---------- */
         scene.add(camera);
-        const handCan = makeCan(); handCan.scale.setScalar(0.8); handCan.position.set(0.5, -0.52, -0.95); handCan.rotation.set(0, -0.5, 0); camera.add(handCan);
+        // держатель лейки: сама лейка повёрнута носиком вперёд (от игрока), держатель наклоняет её при поливе
+        const handCan = new THREE.Group(); handCan.position.set(0.36, -0.42, -0.9); camera.add(handCan);
+        const canInHand = makeCan(); canInHand.scale.setScalar(0.8); canInHand.rotation.y = Math.PI / 2 + 0.35; canInHand.position.y = -0.12; handCan.add(canInHand);
+        const spoutTip = new THREE.Object3D(); spoutTip.position.set(0.4, 0.35, 0); canInHand.add(spoutTip);
         const drops = [];
-        for (let k = 0; k < 7; k++) { const d = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 6), new THREE.MeshBasicMaterial({ color: 0x5fd8ff })); d.visible = false; handCan.add(d); drops.push({ d, t: k / 7 }); }
+        for (let k = 0; k < 8; k++) { const d = new THREE.Mesh(new THREE.SphereGeometry(0.018, 8, 6), new THREE.MeshBasicMaterial({ color: 0x5fd8ff })); d.visible = false; camera.add(d); drops.push({ d, t: k / 8, dx: (Math.random() - 0.5) * 0.04 }); }
+        const tipV = new THREE.Vector3();
         let pourAmt = 0;
 
         /* ---------- ASTRO в 3D: белый робот с голубым визором ---------- */
@@ -1466,7 +1481,7 @@ Game.register({
           // детальная модель — в js/astro3d.js
           const AM = window.AstroModel.build(THREE, { toon, add });
           aBody.add(AM.root);
-          astro.userData.armL = AM.armL; astro.userData.armR = AM.armR; astro.userData.jet = AM.jet; astro.userData.eyes = AM.eyes;
+          astro.userData.am = AM; astro.userData.armL = AM.armL; astro.userData.armR = AM.armR; astro.userData.jet = AM.jet; astro.userData.eyes = AM.eyes;
         }
         const A_STAND = { x: 0, z: 11.5 };
         astro.position.set(A_STAND.x, 0.2, A_STAND.z);
@@ -1478,7 +1493,7 @@ Game.register({
         const P = { x: SHIP.x - 5, z: SHIP.z - 5, yaw: 0, pitch: -0.05 };
         P.yaw = Math.atan2(-(0 - P.x), -(7 - P.z));
         const SPOTS = [
-          { id: 'can', ...POS.garden, r: 2.0, label: L('Лейка: взять', 'Watering can: take it'), only: () => !S.can.has },
+          { id: 'can', ...POS.garden, r: 2.0, label: () => S.can.has ? L('Подставка: поставить лейку на место', 'Stand: put the can back') : L('Лейка: взять', 'Watering can: take it') },
           { id: 'tank', ...POS.tank, r: 2.2, label: () => L(`Бак с водой: наполнить лейку (в запасе ${Math.round(S.water)} л)`, `Water tank: fill the can (${Math.round(S.water)} L in stock)`) },
           ...IND.map(ind => ({ id: 'ind-' + ind.k, ...ind.pos, r: 1.9, label: L(`${ind.name}: проверить`, `${ind.name}: check`) })),
           ...plotPos.map((pp, i) => ({ id: 'plot' + i, ...pp, r: 2.0, plot: i, label: () => {
@@ -1752,15 +1767,16 @@ Game.register({
           astro.visible = astroVis > 0.03; astro.scale.setScalar(Math.max(0.001, astroVis));
           aBody.position.y = Math.sin(t * 2.4) * 0.06;
           astro.lookAt(camera.position.x, astro.position.y, camera.position.z);
-          const aL = astro.userData.armL, aR = astro.userData.armR;
-          if (astroPose === 'wave') { aR.rotation.set(0, 0, 2.6 + Math.sin(t * 9) * 0.35); aL.rotation.set(0, 0, -0.25); }
-          else if (astroPose === 'alarm') { aR.rotation.set(0, 0, 2.7 + Math.sin(t * 14) * 0.15); aL.rotation.set(0, 0, -2.7 - Math.sin(t * 14) * 0.15); }
-          else { aR.rotation.set(-1.4, 0, 0.5); aL.rotation.set(0, 0, -0.25); }
+          astro.userData.am.pose(astroWant || astroMode === 'stand' ? astroPose : 'idle', t, dt);
           astro.userData.jet.material.opacity = 0.4 + Math.random() * 0.25;
           const blink = (t % 3.2) < 0.12; astro.userData.eyes.forEach(e => { e.scale.y = blink ? 0.15 : 1; });
           // лейка в руке наклоняется, когда льёшь воду
-          handCan.rotation.z += ((pourAmt > 0 ? -0.75 : 0) - handCan.rotation.z) * Math.min(1, dt * 8);
-          drops.forEach(p => { p.d.visible = pourAmt > 0; if (pourAmt > 0) { p.t = (p.t + dt * 2.2) % 1; p.d.position.set(0.42 + p.t * 0.05, 0.36 - p.t * 0.7, (p.t * 37 % 1 - 0.5) * 0.08); } });
+          handCan.rotation.x += ((pourAmt > 0 ? -0.85 : 0) - handCan.rotation.x) * Math.min(1, dt * 8);
+          if (pourAmt > 0) { spoutTip.getWorldPosition(tipV); camera.worldToLocal(tipV); }
+          drops.forEach(p => {
+            p.d.visible = pourAmt > 0 && handCan.visible;
+            if (p.d.visible) { p.t = (p.t + dt * 2.4) % 1; p.d.position.set(tipV.x + p.dx, tipV.y - p.t * 0.6, tipV.z - p.t * 0.12); }
+          });
           dishHolder.rotation.y += S.broken.antenna ? 0 : dt * 0.25;
           beacon.visible = Math.sin(t * 5) > 0;
           if (drillOn()) bit.rotation.y += dt * 7;
