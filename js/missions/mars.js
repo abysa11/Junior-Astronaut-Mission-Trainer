@@ -1298,7 +1298,11 @@ Game.register({
               gg.fillStyle = '#fff'; gg.font = '900 80px Nunito, sans-serif'; gg.fillText(L('16 ч', '16 h'), W / 2, 430);
             }
           });
-          ind.scr.mesh.position.set(0, 1.55, 0.06); g.add(ind.scr.mesh);
+          // экран круглый (вписан в циферблат) и виден с обеих сторон индикатора
+          ind.scr.mesh.geometry = new THREE.CircleGeometry(0.37, 48);
+          ind.scr.mesh.position.set(0, 1.55, 0.056); g.add(ind.scr.mesh);
+          const back = new THREE.Mesh(ind.scr.mesh.geometry, ind.scr.mesh.material);
+          back.position.set(0, 1.55, -0.056); back.rotation.y = Math.PI; g.add(back);
           ind.pos = { x: GH.x + ind.x, z: GH.z + ind.z };
           obstacles.push({ x: ind.pos.x, z: ind.pos.z, r: 0.3 });
         });
