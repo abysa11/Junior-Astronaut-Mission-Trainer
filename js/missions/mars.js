@@ -7,7 +7,7 @@
    3D: Three.js (с CDN), мультяшный стиль — toon-материалы и контуры.
    ===================================================================== */
 Game.register({
-  id: 'mars', order: 6, img: 'mars', final: true,
+  id: 'mars', order: 7, img: 'mars', final: true, main: true,
   get tag() { return L('Финал', 'Final'); },
   get title() { return L('Последний шанс на Марсе', 'Last Chance on Mars'); },
   get situation() { return L('Корабль сломался на Марсе. Продержись 10 солов на станции, вырасти картошку, следи за энергией и почини корабль по инструкциям с Земли.', 'The ship broke down on Mars. Survive 10 sols at the station, grow potatoes, watch the energy and repair the ship using Earth’s instructions.'); },

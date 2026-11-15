@@ -120,9 +120,9 @@
   const RANKS = [
     { min: 0, ru: 'Кадет', en: 'Cadet' },
     { min: 3, ru: 'Стажёр', en: 'Trainee' },
-    { min: 6, ru: 'Бортинженер', en: 'Flight Engineer' },
-    { min: 11, ru: 'Пилот', en: 'Pilot' },
-    { min: 18, ru: 'Командир миссии', en: 'Mission Commander' }
+    { min: 7, ru: 'Бортинженер', en: 'Flight Engineer' },
+    { min: 13, ru: 'Пилот', en: 'Pilot' },
+    { min: 20, ru: 'Командир миссии', en: 'Mission Commander' }
   ];
   function totalStars() { return missions.reduce((s, m) => s + (save.best[m.id] || 0), 0); }
   function rank() { const t = totalStars(); const r = RANKS.filter(x => t >= x.min).pop(); return L(r.ru, r.en); }
@@ -172,6 +172,7 @@
             <li><i class="thumb" style="background-image:url('assets/img/storm.jpg')"></i><div><b>${L('Солнечная буря', 'Solar storm')}</b><span>${L('защита', 'protection')}</span></div></li>
             <li><i class="thumb" style="background-image:url('assets/img/power.jpg')"></i><div><b>${L('Поломка питания', 'Power failure')}</b><span>${L('энергия', 'energy')}</span></div></li>
             <li><i class="thumb" style="background-image:url('assets/img/lander-bg.jpg')"></i><div><b>${L('Мягкая посадка', 'Soft landing')}</b><span>${L('гравитация', 'gravity')}</span></div></li>
+            <li><i class="thumb" style="background-image:url('assets/img/rover.jpg')"></i><div><b>${L('Лунные кратеры', 'Lunar craters')}</b><span>${L('луноход в 3D', '3D moon rover')}</span></div></li>
             <li class="final"><i class="thumb" style="background-image:url('assets/img/mars.jpg')"></i><div><b>${L('Финал: Последний шанс на Марсе', 'Final: Last Chance on Mars')}</b><span>${L('10 солов на станции в 3D', '10 sols at a 3D station')}</span></div></li>
           </ul>
           <form class="name-form">
@@ -233,7 +234,10 @@
                  'Pick a training. You can play them in any order and replay them to collect all the stars.')}</p>
         </div>
 
-        <div class="cards"></div>
+        <div class="hub-section"><h3>${L('Основные испытания', 'Main challenges')}</h3><p>${L('Большие 3D-миссии: исследуй Луну и выживи на Марсе!', 'Big 3D missions: explore the Moon and survive on Mars!')}</p></div>
+        <div class="cards main"></div>
+        <div class="hub-section"><h3>${L('Дополнительные испытания', 'Extra challenges')}</h3><p>${L('Короткие тренировки: проходи их и собирай звёзды.', 'Short trainings: complete them and collect stars.')}</p></div>
+        <div class="cards extra"></div>
 
         <div class="cert-cta panel ${done === missions.length ? 'ready' : ''}">
           ${done === missions.length
@@ -241,11 +245,11 @@
             : `<div>${ico('logo')}<span>${L(`Пройди все ${missions.length} испытания, чтобы получить <b>сертификат астронавта</b>.`, `Complete all ${missions.length} challenges to earn your <b>astronaut certificate</b>.`)}</span></div>`}
         </div>
       </section>`);
-    const cards = el.querySelector('.cards');
+    const mainCards = el.querySelector('.cards.main'), extraCards = el.querySelector('.cards.extra');
     missions.forEach((m, i) => {
       const best = save.best[m.id] || 0;
       const c = h(`
-        <article class="mcard panel ${best ? 'done' : ''}" style="--d:${i * 70}ms">
+        <article class="mcard panel ${best ? 'done' : ''} ${m.main ? 'big' : 'small'}" style="--d:${i * 70}ms">
           <div class="mcard-img" data-done="${L('✓ пройдено', '✓ complete')}" style="background-image:url('assets/img/${m.img}.jpg')">
             <span class="mnum">${m.final ? L('Финальное испытание', 'Final challenge') : `${L('Испытание', 'Challenge')} ${i + 1}`}</span>
             <span class="mtag">${esc(m.tag)}</span>
@@ -262,7 +266,7 @@
         </article>`);
       c.querySelector('button').addEventListener('click', () => { sfx.click(); runMission(m); });
       c.querySelector('.mcard-img').addEventListener('click', () => { sfx.click(); runMission(m); });
-      cards.appendChild(c);
+      (m.main ? mainCards : extraCards).appendChild(c);
     });
     bindLang(el, screenHub);
     el.addEventListener('click', e => {

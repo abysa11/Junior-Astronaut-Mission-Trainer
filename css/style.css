@@ -812,3 +812,71 @@ input[type=range] { width: 100%; accent-color: var(--orange); height: 30px; }
   .ab-bubble { border-radius: 18px; width: 100%; }
   .ab-text { font-size: 1rem; }
 }
+
+/* =====================================================================
+   Луноход: HUD, камера, ремонт
+   ===================================================================== */
+.rv-hud { position: absolute; left: 10px; top: 10px; z-index: 4; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.rv-hud > div { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 10px; background: rgba(23, 32, 110, 0.82); border: 2px solid var(--cyan); color: #fff; font-weight: 800; font-size: 0.82rem; }
+.rv-hud span { color: var(--cyan); font-size: 0.72rem; text-transform: uppercase; }
+.rv-bat .bar { width: 80px; height: 8px; }
+.rv-bat .bar i { background: linear-gradient(180deg, #c8ffd9, #7ee0a0); box-shadow: none; }
+.rv-bat.low { border-color: var(--bad); animation: pulseLow 1s infinite; }
+.rv-bat.low .bar i { background: var(--bad); }
+.rv-broken { animation: pulseLow 1s infinite; }
+.rv-broken[hidden] { display: none !important; }
+.rv-cam-ui { position: absolute; inset: 0; z-index: 3; pointer-events: none; border: 6px solid rgba(95, 216, 255, 0.5); border-radius: 12px; }
+.rv-cam-ui[hidden] { display: none !important; }
+.rv-reticle { position: absolute; left: 50%; top: 50%; width: 70px; height: 70px; margin: -35px 0 0 -35px; border: 3px solid #fff; border-radius: 50%; box-shadow: 0 0 0 2px rgba(23, 32, 110, 0.6); }
+.rv-reticle::before, .rv-reticle::after { content: ''; position: absolute; background: #fff; }
+.rv-reticle::before { left: 50%; top: -14px; bottom: -14px; width: 2px; margin-left: -1px; }
+.rv-reticle::after { top: 50%; left: -14px; right: -14px; height: 2px; margin-top: -1px; }
+.rv-cam-label { position: absolute; right: 14px; bottom: 12px; color: #fff; font-family: var(--head); letter-spacing: 0.1em; text-shadow: 0 1px 4px #000; }
+.rv-cam-label::before { content: ''; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #ff5468; margin-right: 6px; animation: blink 1s infinite; }
+.rv-flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 5; }
+.rv-flash.on { animation: rvFlash 0.5s ease-out; }
+@keyframes rvFlash { from { opacity: 0.9; } to { opacity: 0; } }
+.rv .fp-bar { justify-content: space-between; }
+.rv-btns { display: flex; flex-direction: column; gap: 8px; align-self: center; }
+.rv-btns .btn.ghost { padding: 10px 14px; }
+.rv-wheel { position: relative; width: 220px; height: 220px; margin: 12px auto; border-radius: 50%; background: radial-gradient(circle, #c9c6d6 0 30%, #8f8ba6 31% 62%, #2e2c58 63% 70%, #c9c6d6 71%); border: 4px solid var(--ink); }
+.rv-wheel .hub { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; background: var(--orange); border: 3px solid var(--ink); }
+.rv-bolt { position: absolute; width: 38px; height: 38px; margin: -19px 0 0 -19px; border-radius: 50%; border: 3px solid var(--ink); background: radial-gradient(circle at 40% 35%, #fff, #b9b5cc); cursor: pointer; }
+.rv-bolt.tight { background: radial-gradient(circle at 40% 35%, #c8ffd9, var(--good)); }
+.rv-panel { display: block; width: 100%; max-width: 480px; margin: 10px auto; border-radius: 10px; border: 4px solid var(--ink); touch-action: none; cursor: grab;
+  background: repeating-linear-gradient(0deg, transparent 0 28px, #a8e6ff 28px 30px), repeating-linear-gradient(90deg, transparent 0 28px, #a8e6ff 28px 30px), #2a55e0; }
+.rp-fb .pct { font-family: var(--head); font-size: 1.2rem; }
+.rv-wires { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin: 12px 0; }
+.rv-wires > div { display: grid; gap: 10px; }
+.wire-end, .wire-sock { padding: 12px; border-radius: 12px; border: 3px solid var(--ink); background: #fff; font: inherit; font-weight: 800; cursor: pointer; position: relative; }
+.wire-end { border-left: 16px solid var(--c); }
+.wire-sock { border-right: 16px solid var(--c); }
+.wire-end.sel { box-shadow: 0 0 0 4px var(--cyan); }
+.wire-end.done, .wire-sock.done { background: #e2f9ee; border-color: var(--good); opacity: 0.8; }
+.rv-legend { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 0.9rem; }
+.rv-legend i { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--ink); }
+.rv-legend .l-smp { background: #5fe8ff; } .rv-legend .l-got { background: #7ee0a0; }
+.rv-legend .l-pho { background: #ffd166; border-radius: 3px; transform: rotate(45deg); } .rv-legend .l-base { background: #ff8a2a; }
+@media (max-width: 760px) {
+  .rv-hud { position: static; flex-direction: row; flex-wrap: wrap; padding: 6px; }
+  .rv-hud > div { font-size: 0.7rem; padding: 3px 7px; }
+  .rv-bat .bar { width: 50px; }
+  .rv-wires { gap: 16px; }
+}
+
+/* мостик: основные испытания крупно, дополнительные — рядом по пять */
+.hub-section { color: #fff; text-shadow: 0 2px 14px rgba(20, 10, 80, 0.8); margin: 26px 4px 12px; }
+.hub-section h3 { font-size: clamp(1.2rem, 2.6vw, 1.6rem); margin: 0 0 2px; }
+.hub-section p { font-weight: 700; margin: 0; font-size: 0.95rem; }
+.cards.main { grid-template-columns: repeat(2, 1fr); gap: 22px; }
+.cards.extra { grid-template-columns: repeat(5, 1fr); gap: 14px; }
+.mcard.small .mcard-body { padding: 10px 6px 12px; }
+.mcard.small .mcard-body h3 { font-size: 0.98rem; flex: 1; }
+.mcard.small .mcard-body p, .mcard.small .chips { display: none; }
+.mcard.small .mcard-foot { flex-wrap: wrap; gap: 6px; }
+.mcard.small .mcard-foot .btn { padding: 8px 14px; font-size: 0.85rem; }
+.mcard.small .mnum, .mcard.small .mtag { font-size: 0.6rem; padding: 4px 7px; top: 8px; }
+.mcard.small .mnum { left: 8px; } .mcard.small .mtag { right: 8px; }
+.mcard.big .mcard-body h3 { font-size: 1.35rem; }
+@media (max-width: 1100px) { .cards.extra { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 760px) { .cards.main { grid-template-columns: 1fr; } .cards.extra { grid-template-columns: repeat(2, 1fr); } }
